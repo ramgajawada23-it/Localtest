@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Login</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <div class="login-wrapper">
+    
+    <!-- LEFT IMAGE SECTION -->
+    <div class="login-left">
+      <img src="loginbg1.png" alt="Login Illustration" />
+    </div>
+
+    <!-- RIGHT FORM SECTION -->
+    <div class="login-right">
+      <form id="loginForm">
+
+        <h2 class="login-title">LOGIN</h2>
+        <p class="login-subtitle">Enter your mobile number to continue</p>
+
+        <div class="form-field">
+          <label for="loginMobile">Mobile Number</label>
+          <input
+            type="text"
+            id="loginMobile"
+            maxlength="10"
+            placeholder="Enter mobile number"
+            required
+          />
+          <small class="error-text"></small>
+        </div>
+
+        <button type="submit" class="login-btn">Continue</button>
+
+      </form>
+    </div>
+
+  </div>
+
+  <script src="login.js"></script>
+</body>
+</html>
