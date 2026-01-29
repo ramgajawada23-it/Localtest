@@ -24,12 +24,14 @@
     <aside class="sidebar">
       <h3 class="sidebar-title">About you</h3>
       <ul class="step-menu">
-        <li onclick="goToStep(0)">Personal</li>
-        <li onclick="goToStep(1)">Family Details</li>
-        <li onclick="goToStep(2)">Education & Skills</li>
-        <li onclick="goToStep(3)">Experience</li>
-        <li onclick="goToStep(4)">Salary & Declaration</li>
-      </ul>
+  <li onclick="goToStep(0)">Personal</li>
+  <li onclick="goToStep(1)">Family Details</li>
+  <li onclick="goToStep(2)">Education & Skills</li>
+  <li onclick="goToStep(3)">Experience</li>
+  <li onclick="goToStep(4)">Salary & Declaration</li>
+  <li onclick="goToStep(5)">Mediclaim Circular</li> <!-- ✅ NEW -->
+</ul>
+
     </aside>
 
     <div class="container">
@@ -43,6 +45,7 @@
           <div class="stepper-step">3</div>
           <div class="stepper-step">4</div>
           <div class="stepper-step">5</div>
+          <div class="stepper-step">6</div>
         </div>
         <!-- ================= STEP 1 ================= -->
         <section class="form-step active">
@@ -751,130 +754,131 @@
         </section>
 
         <!-- ================= STEP 6 ================= -->
-        <section class="form-step step-circular" data-step="6">
-          <main class="page a4 portrait">
+    <section class="form-step step-circular" data-step="6">
+  <main class="page a4 portrait">
 
-            <header class="page-header">
-              <div class="org">
-                <div class="org-name">NATCO PHARMA LIMITED</div>
-                <div class="org-sub">Field Force (Additions)</div>
-              </div>
-              <h1 class="doc-title">CIRCULAR</h1>
-              <div class="doc-subtitle">
-                Group Mediclaim – Collection of Family Details
-              </div>
-            </header>
+    <header class="page-header">
+      <div class="org">
+        <div class="org-name">NATCO PHARMA LIMITED</div>
+        <div class="org-sub">Field Force (Additions)</div>
+      </div>
+      <h1 class="doc-title">CIRCULAR</h1>
+      <div class="doc-subtitle">
+        Group Mediclaim – Collection of Family Details
+      </div>
+    </header>
 
-            <section class="intro">
-              <p>Dear All,</p>
-              <p>
-                It is proposed to cover the Field Employees under Group Mediclaim Policy.
-                Therefore, you are requested to provide the family details immediately.
-              </p>
-            </section>
+    <section class="intro">
+      <p>Dear All,</p>
+      <p>
+        It is proposed to cover the Field Employees under Group Mediclaim Policy.
+        Therefore, you are requested to provide the family details immediately.
+      </p>
+    </section>
 
-            <!-- EMPLOYEE DETAILS -->
-            <section class="employee-block">
-              <h2 class="section-title">Employee Details</h2>
+    <!-- EMPLOYEE DETAILS -->
+    <section class="employee-block">
+      <h2 class="section-title">Employee Details</h2>
 
-              <div class="grid grid-3">
-                <div class="field">
-                  <label>Name of the Employee</label>
-                  <div class="line" data-bind="firstName lastName"></div>
-                </div>
+      <div class="grid grid-3">
+        <div class="field">
+          <label>Name of the Employee</label>
+          <div class="line" data-bind="firstName lastName"></div>
+        </div>
 
-                <div class="field">
-                  <label>D.O.B.</label>
-                  <div class="line short" data-bind="dob"></div>
-                </div>
+        <div class="field">
+          <label>D.O.B.</label>
+          <div class="line short" data-bind="dob"></div>
+        </div>
 
-                <div class="field">
-                  <label>Emp. No.</label>
-                  <div class="line short" data-bind="employeeId"></div>
-                </div>
-              </div>
-            </section>
+        <div class="field">
+          <label>Emp. No.</label>
+          <div class="line short" data-bind="employeeId"></div>
+        </div>
+      </div>
+    </section>
 
-            <!-- FAMILY TABLE -->
-            <section class="family-block">
-              <h2 class="section-title">
-                Family Members details <span class="muted">(As Per Aadhaar)</span>
-              </h2>
+    <!-- FAMILY TABLE -->
+    <section class="family-block">
+      <h2 class="section-title">
+        Family Members details <span class="muted">(As Per Aadhaar)</span>
+      </h2>
 
-              <div class="table-wrap">
-                <table class="table family-table">
-                  <thead>
-                    <tr>
-                      <th>S.No.</th>
-                      <th>Relation</th>
-                      <th>Gender</th>
-                      <th>Name</th>
-                      <th>Date of Birth</th>
-                    </tr>
-                  </thead>
-                  <tbody id="mediclaimFamilyBody">
-                    <!-- ✅ JS will populate -->
-                  </tbody>
-                </table>
-              </div>
+      <div class="table-wrap">
+        <table class="table family-table">
+          <thead>
+            <tr>
+              <th>S.No.</th>
+              <th>Relation</th>
+              <th>Gender</th>
+              <th>Name</th>
+              <th>Date of Birth</th>
+            </tr>
+          </thead>
+          <tbody id="mediclaimFamilyBody">
+            <!-- JS will populate -->
+          </tbody>
+        </table>
+      </div>
 
-              <div class="signature-row">
-                <div class="sig-box">
-                  <span>Signature of the Employee</span>
-                  <div class="line"></div>
-                </div>
-                <div class="sig-box">
-                  <span>Date</span>
-                  <div class="line short" data-bind="today"></div>
-                </div>
-              </div>
-            </section>
+      <div class="signature-row">
+        <div class="sig-box">
+          <span>Signature of the Employee</span>
+          <div class="line"></div>
+        </div>
+        <div class="sig-box">
+          <span>Date</span>
+          <div class="line short" data-bind="today"></div>
+        </div>
+      </div>
+    </section>
 
-            <!-- NOTE -->
-            <section class="note-block">
-              <h2 class="section-title">Note</h2>
-              <p>
-                Mediclaim enrollment is allowed only at the time of joining or renewal.
-                Mid‑term requests will not be processed.
-              </p>
+    <!-- NOTE -->
+    <section class="note-block">
+      <h2 class="section-title">Note</h2>
+      <p>
+        Mediclaim enrollment is allowed only at the time of joining or renewal.
+        Mid‑term requests will not be processed.
+      </p>
 
-              <table class="table deduction-table table-wrap narrow">
-                <thead>
-                  <tr>
-                    <th>Grade</th>
-                    <th class="right">Monthly Deduction (₹)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>BDE(T) & BDE</td>
-                    <td class="right">1,000</td>
-                  </tr>
-                  <tr>
-                    <td>ASE / ABDM / RMM</td>
-                    <td class="right">1,400</td>
-                  </tr>
-                  <tr>
-                    <td>Sr. RMM & ABOVE</td>
-                    <td class="right">1,600</td>
-                  </tr>
-                </tbody>
-              </table>
+      <table class="table deduction-table table-wrap narrow">
+        <thead>
+          <tr>
+            <th>Grade</th>
+            <th class="right">Monthly Deduction (₹)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>BDE(T) & BDE</td>
+            <td class="right">1,000</td>
+          </tr>
+          <tr>
+            <td>ASE / ABDM / RMM</td>
+            <td class="right">1,400</td>
+          </tr>
+          <tr>
+            <td>Sr. RMM & ABOVE</td>
+            <td class="right">1,600</td>
+          </tr>
+        </tbody>
+      </table>
 
-              <div class="enrol-question">
-                <span>Interested to enrol in Mediclaim?</span>
-                <label class="checkline"><span class="box"></span> Yes</label>
-                <label class="checkline"><span class="box"></span> No</label>
-              </div>
-            </section>
+      <div class="enrol-question">
+        <span>Interested to enrol in Mediclaim?</span>
+        <label class="checkline"><span class="box"></span> Yes</label>
+        <label class="checkline"><span class="box"></span> No</label>
+      </div>
+    </section>
 
-            <footer class="page-footer">
-              <div>CIRCULAR – Group Mediclaim</div>
-              <div>Page 12</div>
-            </footer>
+    <footer class="page-footer">
+      <div>CIRCULAR – Group Mediclaim</div>
+      <div>Page 12</div>
+    </footer>
 
-          </main>
-        </section>
+  </main>
+</section>
+
 
         <!-- Navigation -->
         <div class="nav-buttons">

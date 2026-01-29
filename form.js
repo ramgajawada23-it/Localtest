@@ -164,6 +164,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 500);
   }
 
+document.getElementById("bankAccount")?.addEventListener("input", e => {
+  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 18);
+});
+
 
   function syncAllParentRows() {
     document.querySelectorAll("#familyTableBody tr").forEach(row => {
@@ -250,6 +254,28 @@ document.addEventListener("DOMContentLoaded", () => {
       window.location.reload();
     };
   }
+
+  function allowOnlyDigits(input, maxLength) {
+  input.addEventListener("input", e => {
+    let v = e.target.value.replace(/\D/g, ""); // ❌ remove non-digits
+    if (v.length > maxLength) v = v.slice(0, maxLength);
+    e.target.value = v;
+  });
+}
+
+// UAN – exactly 12 digits
+const uanInput = document.getElementById("uanNumber");
+if (uanInput) {
+  allowOnlyDigits(uanInput, 12);
+}
+
+
+// Account Number – max 18 digits
+const accountInput = document.getElementById("accountNumber");
+if (accountInput) {
+  allowOnlyDigits(accountInput, 18);
+}
+
   /* ================= ERROR HELPERS ================= */
   function clearStepErrors(step) {
     step?.querySelectorAll(".error-text")?.forEach(e => e.remove());
@@ -369,7 +395,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const inRange = (v, min, max) => Number(v) >= min && Number(v) <= max;
 
   const ifscPattern = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-  const uanPattern = /^\d{12}$/;
+
 
   /* =========================================================
     PAN + AADHAAR (CORRECTED)
@@ -377,18 +403,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const panInput = document.getElementById("pan");
   const aadhaarInput = document.getElementById("aadhaar");
 
-  panInput?.addEventListener("input", e => {
-    let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (v.length > 10) v = v.slice(0, 10);
-    e.target.value = v;
+ panInput?.addEventListener("input", e => {
+  if (isRestoringDraft) return;
 
-    if (panPattern.test(v)) {
-      realPan = v;
-      e.target.value = v.slice(0, 2) + "****" + v.slice(6);
-    }
-  });
+  let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (v.length > 10) v = v.slice(0, 10);
+  e.target.value = v;
 
-  panInput?.addEventListener("focus", () => realPan && (panInput.value = realPan));
+  if (panPattern.test(v)) {
+    realPan = v;
+    e.target.value = v.slice(0, 2) + "****" + v.slice(6);
+  }
+});
+
+panInput?.addEventListener("focus", () => {
+  if (isRestoringDraft) return;
+  if (realPan) panInput.value = realPan;
+});
+
 panInput?.addEventListener("blur", () => {
   if (isRestoringDraft) return;
   if (panPattern.test(panInput.value)) {
@@ -398,32 +430,34 @@ panInput?.addEventListener("blur", () => {
   }
 });
 
+aadhaarInput?.addEventListener("input", e => {
+  if (isRestoringDraft) return; // ✅ ADD THIS
 
-  aadhaarInput?.addEventListener("input", e => {
-    let v = e.target.value.replace(/\D/g, "");
-    if (v.length > 12) v = v.slice(0, 12);
-    e.target.value = v;
+  let v = e.target.value.replace(/\D/g, "");
+  if (v.length > 12) v = v.slice(0, 12);
+  e.target.value = v;
 
-    if (aadhaarPlain.test(v)) {
-      realAadhaar = v;
-      e.target.value = "XXXXXXXX" + v.slice(8);
-    }
-  });
+  if (aadhaarPlain.test(v)) {
+    realAadhaar = v;
+    e.target.value = "XXXXXXXX" + v.slice(8);
+  }
+});
 
-  aadhaarInput?.addEventListener("focus", () => realAadhaar && (aadhaarInput.value = realAadhaar));
-  aadhaarInput?.addEventListener("blur", () => {
-    if (aadhaarPlain.test(aadhaarInput.value)) {
-      realAadhaar = aadhaarInput.value;
-      aadhaarInput.value = "XXXXXXXX" + aadhaarInput.value.slice(8);
-    }
-  });
+ aadhaarInput?.addEventListener("blur", () => {
+  if (isRestoringDraft) return;
 
-  const uanInput = document.getElementById("uan");
-  uanInput?.addEventListener("input", e => {
-    e.target.value = e.target.value
-      .replace(/\D/g, "")
-      .slice(0, 12);
-  });
+  if (aadhaarPlain.test(aadhaarInput.value)) {
+    realAadhaar = aadhaarInput.value;
+    aadhaarInput.value = "XXXXXXXX" + aadhaarInput.value.slice(8);
+  }
+});
+
+
+aadhaarInput?.addEventListener("focus", () => {
+  if (isRestoringDraft) return;
+  if (realAadhaar) aadhaarInput.value = realAadhaar;
+});
+
 
   /* =========================================================
     STEP 1 – PERSONAL
@@ -683,12 +717,17 @@ panInput?.addEventListener("blur", () => {
       ok = false;
     }
 
-    // ----- Bank Details -----
-    const acc = document.getElementById("bankAccount");
-    if (!isDigits(acc.value) || acc.value.length < 8) {
-      showError(acc, "Invalid account number", silent);
-      ok = false;
-    }
+    const acc = document.getElementById("accountNumber");
+if (!isDigits(acc.value) || acc.value.length < 8 || acc.value.length > 18) {
+  showError(acc, "Account number must be 8–18 digits", silent);
+  ok = false;
+}
+
+const uan = document.getElementById("uanNumber");
+if (uan && !/^\d{12}$/.test(uan.value)) {
+  showError(uan, "UAN must be exactly 12 digits", silent);
+  ok = false;
+}
 
     // ----- Bank Name -----
     const bankName = step.querySelector("#bankName");
@@ -1502,25 +1541,27 @@ panInput?.addEventListener("blur", () => {
 
     if (!draft) return;
 
-    Object.entries(draft.fields || {}).forEach(([key, val]) => {
-      if (key === "pan" || key === "aadhaar") return;
+isRestoringDraft = true;
 
-      const el =
-        document.getElementById(key) ||
-        document.querySelector(`[name="${key}"]`);
+// restore normal fields
+Object.entries(draft.fields || {}).forEach(([key, val]) => {
+  if (key === "pan" || key === "aadhaar") return;
 
-      if (!el) return;
+  const el =
+    document.getElementById(key) ||
+    document.querySelector(`[name="${key}"]`);
 
-      if (el.type === "checkbox") el.checked = val;
-      else if (el.type === "radio") {
-        const r = document.querySelector(`[name="${el.name}"][value="${val}"]`);
-        if (r) r.checked = true;
-      } else {
-        el.value = val;
-      }
-    });
+  if (!el) return;
 
-  isRestoringDraft = true;
+  if (el.type === "checkbox") el.checked = val;
+  else if (el.type === "radio") {
+    const r = document.querySelector(`[name="${el.name}"][value="${val}"]`);
+    if (r) r.checked = true;
+  } else {
+    el.value = val;
+  }
+});
+
 // restore PAN
 if (draft.fields?.pan && panInput) {
   realPan = draft.fields.pan;
@@ -1556,6 +1597,28 @@ isRestoringDraft = false;
   window.addEventListener("online", () => {
     console.log("Back online – sync triggered");
   });
+
+  window.addEventListener("online", async () => {
+  const pending = await loadOfflineSubmissions(); // your IndexedDB helper
+  if (!pending?.length) return;
+
+  for (const payload of pending) {
+    try {
+      const res = await fetch("http://localhost:8080/candidates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        await removeOfflineSubmission(payload.id);
+      }
+    } catch (e) {
+      console.warn("Sync failed for one entry", e);
+    }
+  }
+});
+
 
   updateUI();
   updateNextVisualState();
