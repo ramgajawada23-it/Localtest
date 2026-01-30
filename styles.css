@@ -542,3 +542,59 @@ textarea.error {
   }
 }
 
+#mediclaimDetails {
+  display: none;
+}
+
+
+.language-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+}
+
+.language-table th,
+.language-table td {
+  border: 1px solid #ddd;
+  padding: 6px;
+  text-align: center;
+}
+
+.language-table th:first-child,
+.language-table td:first-child {
+  text-align: left;
+}
+
+.btn-add {
+  padding: 6px 12px;
+  border: 1px solid rgb(62, 57, 82);
+  background: white;
+  color: #145b98;
+  cursor: pointer;
+}
+
+.btn-add:hover {
+  background:#47749b;
+  color: white;
+}
+
+
+.activity-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.activity-table th,
+.activity-table td {
+  border: 1px solid #ddd;
+  padding: 6px;
+  vertical-align: top;
+}
+
+.activity-table textarea {
+  width: 100%;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+

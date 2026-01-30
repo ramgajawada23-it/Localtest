@@ -1,17 +1,15 @@
-document.addEventListener("DOMContentLoaded", async () => {
-  try {
-    await openDB();
-    console.log("IndexedDB ready");
-  } catch (e) {
-    console.warn("IndexedDB not available");
-  }
-});
+function getCandidateFullName() {
+  const fn = document.getElementById("firstName")?.value || "";
+  const ln = document.getElementById("lastName")?.value || "";
+  return `${fn} ${ln}`.trim();
+}
 /* =========================================================
   GLOBAL HELPERS
 ========================================================= */
 const isFutureDate = d => d && new Date(d) > new Date();
 const minLen = (v, l) => v && v.trim().length >= l;
 // const onlyNumbers = v => /^\d+$/.test(v);
+const val = el => el?.value?.trim() || "";
 
 const isValidPersonName = v =>
   typeof v === "string" &&
@@ -68,35 +66,165 @@ window.addFamilyRow = () => {
 
   // ✅ THIS WAS MISSING
   const rel = tr.querySelector("select[name*='relationship']");
-  rel.addEventListener("change", () => syncParentNameToFamilyRow(tr));
+  rel.addEventListener("change", () => {
+    syncFamilyRow(tr);
+    updateFamilyRelationshipOptions(); // ✅ ADD THIS
+  });
+
 };
 
-function syncParentNameToFamilyRow(row) {
+function syncFamilyRow(row) {
   const rel = row.querySelector("select[name*='relationship']");
   const nameInput = row.querySelector("input[name*='name']");
+  const dobInputRow = row.querySelector("input[name*='dob']");
 
-  if (!rel || !nameInput) return;
+  if (!rel || !nameInput || !dobInputRow) return;
 
-  const fatherName = document.getElementById("fatherName")?.value || "";
-  const motherName = document.getElementById("motherName")?.value || "";
+  const fatherName = document.getElementById("fatherName")?.value?.trim() || "";
+  const motherName = document.getElementById("motherName")?.value?.trim() || "";
 
-  if (rel.value === "Father" && fatherName) {
-    nameInput.value = fatherName;
+  // 🔴 ALWAYS reset first
+  nameInput.readOnly = false;
+  nameInput.value = "";
+
+  if (rel.value === "Father") {
+    if (fatherName) nameInput.value = fatherName;
+    nameInput.readOnly = true;
+  }
+  else if (rel.value === "Mother") {
+    if (motherName) nameInput.value = motherName;
+    nameInput.readOnly = true;
   }
 
-  if (rel.value === "Mother" && motherName) {
-    nameInput.value = motherName;
+  dobInputRow.readOnly = false;
+}
+
+function updateFamilyRelationshipOptions() {
+  const rows = document.querySelectorAll("#familyTableBody tr");
+
+  let fatherUsed = false;
+  let motherUsed = false;
+
+  // First pass → detect used relations
+  rows.forEach(row => {
+    const rel = row.querySelector("select[name*='relationship']");
+    if (!rel) return;
+
+    if (rel.value === "Father") fatherUsed = true;
+    if (rel.value === "Mother") motherUsed = true;
+  });
+
+  // Second pass → disable options accordingly
+  rows.forEach(row => {
+    const rel = row.querySelector("select[name*='relationship']");
+    if (!rel) return;
+
+    rel.querySelectorAll("option").forEach(opt => {
+      if (opt.value === "Father") {
+        opt.disabled = fatherUsed && rel.value !== "Father";
+      }
+      if (opt.value === "Mother") {
+        opt.disabled = motherUsed && rel.value !== "Mother";
+      }
+    });
+  });
+}
+
+function setupMediclaimRequiredLogic() {
+  const yes = document.getElementById("mediclaimYes");
+  const no = document.getElementById("mediclaimNo");
+  const details = document.getElementById("mediclaimDetails");
+  const hidden = document.getElementById("mediclaimConsent");
+
+  if (!yes || !no || !details || !hidden) return;
+
+  // all inputs inside mediclaim section
+  const inputs = details.querySelectorAll("input, select");
+
+  function toggleRequired(isYes) {
+    details.style.display = isYes ? "block" : "none";
+    hidden.value = isYes ? "Yes" : "No";
+
+    inputs.forEach(el => {
+      // do NOT force readonly auto‑filled fields
+      if (!el.hasAttribute("readonly")) {
+        el.required = isYes;
+      }
+    });
+  }
+
+  yes.addEventListener("change", () => toggleRequired(true));
+  no.addEventListener("change", () => toggleRequired(false));
+
+  // restore state (offline / back navigation)
+  if (hidden.value === "Yes") {
+    yes.checked = true;
+    toggleRequired(true);
+  } else if (hidden.value === "No") {
+    no.checked = true;
+    toggleRequired(false);
+  } else {
+    details.style.display = "none";
   }
 }
 
+
+function fillMediclaimEmployeeDetails() {
+  const map = {
+    "firstName lastName": () =>
+      `${firstName.value || ""} ${lastName.value || ""}`.trim(),
+    dob: () => dob.value,
+    employeeId: () => employeeId.value,
+    today: () => new Date().toLocaleDateString()
+  };
+  document.querySelectorAll("[data-bind]").forEach(el => {
+    const key = el.dataset.bind;
+    if (map[key]) el.textContent = map[key]();
+  });
+}
+// run when entering step‑6
+function showStep(index) {
+  steps.forEach((step, i) => step.classList.toggle("active", i === index));
+  stepperSteps.forEach((circle, i) =>
+    circle.classList.toggle("active", i <= index)
+  );
+  prevBtn.style.display = index === 0 ? "none" : "inline-block";
+  nextBtn.style.display = index === TOTAL_STEPS - 1 ? "none" : "inline-block";
+  submitBtn.style.display = index === TOTAL_STEPS - 1 ? "inline-block" : "none";
+  if (index === 5) fillMediclaimEmployeeDetails(); // ✅ step‑6
+}
+
+
+function initFamilyRow(row) {
+  const rel = row.querySelector("select[name*='relationship']");
+  if (!rel) return;
+
+  rel.addEventListener("change", () => {
+    syncFamilyRow(row);
+    updateFamilyRelationshipOptions();
+  });
+
+  // initial state sync
+  syncFamilyRow(row);
+  updateFamilyRelationshipOptions();
+}
 /* =========================================================
   MAIN
 ========================================================= */
 document.addEventListener("DOMContentLoaded", () => {
 
+  (async () => {
+    try {
+      await openDB();
+      console.log("IndexedDB ready");
+    } catch (e) {
+      console.warn("IndexedDB not available");
+    }
+  })();
   let currentStep = 0;
-  window._debugCurrentStep = () => currentStep;
   let isSubmitting = false;
+  window._debugCurrentStep = () => currentStep;
+
   const loggedInMobile = sessionStorage.getItem("loggedInMobile");
   const formStatus = sessionStorage.getItem("formStatus");
   const serverDraft = sessionStorage.getItem("serverDraft");
@@ -128,18 +256,18 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     return; // ⛔ Stop form JS execution
   }
+
+  setupMediclaimRequiredLogic();
+
+  document
+    .querySelectorAll("#familyTableBody tr")
+    .forEach(initFamilyRow);
+
+
   const steps = document.querySelectorAll(".form-step");
   const nextBtn = document.getElementById("nextBtn");
   const prevBtn = document.getElementById("prevBtn");
   const submitBtn = document.getElementById("submitBtn");
-
-  document
-    .querySelectorAll("#mediclaimFamilyBody tr")
-    .forEach(row => {
-      row
-        .querySelector("select[name*='relationship']")
-        ?.addEventListener("change", () => syncParentNameToFamilyRow(row));
-    });
 
   let draftTimer;
   function debouncedSaveDraft() {
@@ -164,19 +292,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 500);
   }
 
-document.getElementById("bankAccount")?.addEventListener("input", e => {
-  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 18);
-});
 
+  document.getElementById("bankAccount")?.addEventListener("input", e => {
+    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 18);
+  });
 
-  function syncAllParentRows() {
-    document.querySelectorAll("#familyTableBody tr").forEach(row => {
-      syncParentNameToFamilyRow(row);
-    });
+  function syncAllFamilyRows() {
+    document.querySelectorAll("#familyTableBody tr").forEach(syncFamilyRow);
   }
 
-  document.getElementById("fatherName")?.addEventListener("input", syncAllParentRows);
-  document.getElementById("motherName")?.addEventListener("input", syncAllParentRows);
+  document.getElementById("fatherName")
+    ?.addEventListener("input", syncAllFamilyRows);
+
+  document.getElementById("motherName")
+    ?.addEventListener("input", syncAllFamilyRows);
 
   document.addEventListener("input", e => {
     const el = e.target;
@@ -198,6 +327,64 @@ document.getElementById("bankAccount")?.addEventListener("input", e => {
       clearError(group);
     });
   });
+
+  const languageTableBody = document.querySelector("#languageTable tbody");
+  const addLanguageBtn = document.getElementById("addLanguageBtn");
+
+  addLanguageBtn?.addEventListener("click", () => {
+    const index = languageTableBody.querySelectorAll("tr").length;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+    <td>
+      <input type="text" name="languages[${index}][name]" placeholder="Language">
+    </td>
+    <td>
+      <input type="checkbox" name="languages[${index}][speak]">
+    </td>
+    <td>
+      <input type="checkbox" name="languages[${index}][read]">
+    </td>
+    <td>
+      <input type="checkbox" name="languages[${index}][write]">
+    </td>
+    <td>
+      <input type="radio" name="motherTongue">
+    </td>
+  `;
+
+    languageTableBody.appendChild(tr);
+  });
+
+  function validateStep3Languages() {
+    const checked = document.querySelectorAll(
+      '#languageSection input[type="checkbox"]:checked'
+    );
+
+    const manualInputs = document.querySelectorAll(
+      '#extraLanguages .language-input'
+    );
+
+    const error = document.getElementById("languageError");
+
+    let hasManualValue = false;
+    manualInputs.forEach(input => {
+      if (input.value.trim() !== "") hasManualValue = true;
+    });
+
+    if (checked.length === 0 && !hasManualValue) {
+      if (error) {
+        error.style.display = "block";
+      }
+      document.getElementById("languageSection")?.scrollIntoView({
+        behavior: "smooth"
+      });
+      return false;
+    }
+
+    if (error) error.style.display = "none";
+    return true;
+  }
 
 
   function toggleExperienceDependentSections() {
@@ -238,7 +425,6 @@ document.getElementById("bankAccount")?.addEventListener("input", e => {
   });
 
   const newFormBtn = document.getElementById("newFormBtn");
-
   if (newFormBtn) {
     newFormBtn.onclick = async () => {
       await fetch("/api/new-form", {
@@ -256,25 +442,24 @@ document.getElementById("bankAccount")?.addEventListener("input", e => {
   }
 
   function allowOnlyDigits(input, maxLength) {
-  input.addEventListener("input", e => {
-    let v = e.target.value.replace(/\D/g, ""); // ❌ remove non-digits
-    if (v.length > maxLength) v = v.slice(0, maxLength);
-    e.target.value = v;
-  });
-}
+    input.addEventListener("input", e => {
+      let v = e.target.value.replace(/\D/g, ""); // ❌ remove non-digits
+      if (v.length > maxLength) v = v.slice(0, maxLength);
+      e.target.value = v;
+    });
+  }
 
-// UAN – exactly 12 digits
-const uanInput = document.getElementById("uanNumber");
-if (uanInput) {
-  allowOnlyDigits(uanInput, 12);
-}
+  // UAN – exactly 12 digits
+  const uanInput = document.getElementById("uan");
+  if (uanInput) {
+    allowOnlyDigits(uanInput, 12);
+  }
 
-
-// Account Number – max 18 digits
-const accountInput = document.getElementById("accountNumber");
-if (accountInput) {
-  allowOnlyDigits(accountInput, 18);
-}
+  // Account Number – max 18 digits
+  const accountInput = document.getElementById("bankAccount");
+  if (accountInput) {
+    allowOnlyDigits(accountInput, 18);
+  }
 
   /* ================= ERROR HELPERS ================= */
   function clearStepErrors(step) {
@@ -350,7 +535,6 @@ if (accountInput) {
 
   // ================= STEP‑3 CONDITIONAL TEXTAREAS =================
   const step3 = steps[2];
-
   step3
     .querySelectorAll("textarea.conditional-details")
     .forEach(textarea => {
@@ -387,8 +571,6 @@ if (accountInput) {
     });
   });
 
-
-
   const isBlank = v => !v || !v.trim();
   const isAlpha = v => typeof v === "string" && /^[A-Za-z ]+$/.test(v.trim());
   const isDigits = v => /^\d+$/.test(v);
@@ -403,60 +585,60 @@ if (accountInput) {
   const panInput = document.getElementById("pan");
   const aadhaarInput = document.getElementById("aadhaar");
 
- panInput?.addEventListener("input", e => {
-  if (isRestoringDraft) return;
+  panInput?.addEventListener("input", e => {
+    if (isRestoringDraft) return;
 
-  let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (v.length > 10) v = v.slice(0, 10);
-  e.target.value = v;
+    let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (v.length > 10) v = v.slice(0, 10);
+    e.target.value = v;
 
-  if (panPattern.test(v)) {
-    realPan = v;
-    e.target.value = v.slice(0, 2) + "****" + v.slice(6);
-  }
-});
+    if (panPattern.test(v)) {
+      realPan = v;
+      e.target.value = v.slice(0, 2) + "****" + v.slice(6);
+    }
+  });
 
-panInput?.addEventListener("focus", () => {
-  if (isRestoringDraft) return;
-  if (realPan) panInput.value = realPan;
-});
+  panInput?.addEventListener("focus", () => {
+    if (isRestoringDraft) return;
+    if (realPan) panInput.value = realPan;
+  });
 
-panInput?.addEventListener("blur", () => {
-  if (isRestoringDraft) return;
-  if (panPattern.test(panInput.value)) {
-    realPan = panInput.value;
-    panInput.value =
-      panInput.value.slice(0, 2) + "****" + panInput.value.slice(6);
-  }
-});
+  panInput?.addEventListener("blur", () => {
+    if (isRestoringDraft) return;
+    if (panPattern.test(panInput.value)) {
+      realPan = panInput.value;
+      panInput.value =
+        panInput.value.slice(0, 2) + "****" + panInput.value.slice(6);
+    }
+  });
 
-aadhaarInput?.addEventListener("input", e => {
-  if (isRestoringDraft) return; // ✅ ADD THIS
+  aadhaarInput?.addEventListener("input", e => {
+    if (isRestoringDraft) return; // ✅ ADD THIS
 
-  let v = e.target.value.replace(/\D/g, "");
-  if (v.length > 12) v = v.slice(0, 12);
-  e.target.value = v;
+    let v = e.target.value.replace(/\D/g, "");
+    if (v.length > 12) v = v.slice(0, 12);
+    e.target.value = v;
 
-  if (aadhaarPlain.test(v)) {
-    realAadhaar = v;
-    e.target.value = "XXXXXXXX" + v.slice(8);
-  }
-});
+    if (aadhaarPlain.test(v)) {
+      realAadhaar = v;
+      e.target.value = "XXXXXXXX" + v.slice(8);
+    }
+  });
 
- aadhaarInput?.addEventListener("blur", () => {
-  if (isRestoringDraft) return;
+  aadhaarInput?.addEventListener("blur", () => {
+    if (isRestoringDraft) return;
 
-  if (aadhaarPlain.test(aadhaarInput.value)) {
-    realAadhaar = aadhaarInput.value;
-    aadhaarInput.value = "XXXXXXXX" + aadhaarInput.value.slice(8);
-  }
-});
+    if (aadhaarPlain.test(aadhaarInput.value)) {
+      realAadhaar = aadhaarInput.value;
+      aadhaarInput.value = "XXXXXXXX" + aadhaarInput.value.slice(8);
+    }
+  });
 
 
-aadhaarInput?.addEventListener("focus", () => {
-  if (isRestoringDraft) return;
-  if (realAadhaar) aadhaarInput.value = realAadhaar;
-});
+  aadhaarInput?.addEventListener("focus", () => {
+    if (isRestoringDraft) return;
+    if (realAadhaar) aadhaarInput.value = realAadhaar;
+  });
 
 
   /* =========================================================
@@ -650,7 +832,7 @@ aadhaarInput?.addEventListener("focus", () => {
     const genderChecked = step.querySelector("input[name='gender']:checked");
 
     if (!genderChecked) {
-      clearError(genderGroup); // ✅ remove existing error first
+      clearError(genderGroup);
       showError(genderGroup, " ", silent);
       ok = false;
     }
@@ -717,17 +899,17 @@ aadhaarInput?.addEventListener("focus", () => {
       ok = false;
     }
 
-    const acc = document.getElementById("accountNumber");
-if (!isDigits(acc.value) || acc.value.length < 8 || acc.value.length > 18) {
-  showError(acc, "Account number must be 8–18 digits", silent);
-  ok = false;
-}
+    const acc = document.getElementById("bankAccount");
+    if (!isDigits(acc.value) || acc.value.length < 8 || acc.value.length > 18) {
+      showError(acc, "Account number must be 8–18 digits", silent);
+      ok = false;
+    }
 
-const uan = document.getElementById("uanNumber");
-if (uan && !/^\d{12}$/.test(uan.value)) {
-  showError(uan, "UAN must be exactly 12 digits", silent);
-  ok = false;
-}
+    const uan = document.getElementById("uan");
+    if (uan && !/^\d{12}$/.test(uan.value)) {
+      showError(uan, "UAN must be exactly 12 digits", silent);
+      ok = false;
+    }
 
     // ----- Bank Name -----
     const bankName = step.querySelector("#bankName");
@@ -884,124 +1066,157 @@ if (uan && !/^\d{12}$/.test(uan.value)) {
   /* =========================================================
     STEP 3 – EDUCATION
   ========================================================= */
+  function addLanguage() {
+    const container = document.getElementById("extraLanguages");
+    const div = document.createElement("div");
+    div.className = "language-item";
+    div.innerHTML = `
+    <input type="text" placeholder="Enter language" class="language-input" required>
+    <button type="button" onclick="this.parentElement.remove()">Remove</button>
+  `;
+    container.appendChild(div);
+  }
+
   function validateStep3(silent = false) {
     const step = steps[2];
     if (!silent) clearStepErrors(step);
     let ok = true;
-    const join = step.querySelector('[placeholder="Joining Year"]');
-    const leave = step.querySelector('[placeholder="Leaving Year"]');
-    const percent = step.querySelector('[placeholder="Aggregate Percentage"]');
-
-
-    const college = step.querySelector('[placeholder="College / School Name"]');
-
-    if (isBlank(college.value)) {
-      showError(college, "Institution required", silent);
-      ok = false;
-    }
-
-    // ----- Degree & Stream required -----
     const degree = step.querySelector('[placeholder="Degree / Exam"]');
-    const stream = step.querySelector('[placeholder="Stream / Branch"]');
-    const board = step.querySelector('[placeholder="Board / University"]');
-    if (isBlank(degree.value)) {
-      showError(degree, "Degree is required", silent);
-      ok = false;
-    }
+const stream = step.querySelector('[placeholder="Stream / Branch"]');
+const board  = step.querySelector('[placeholder="Board / University"]');
+const join   = step.querySelector('[placeholder="Joining Year"]');
+const leave  = step.querySelector('[placeholder="Leaving Year"]');
+const percent = step.querySelector('[placeholder="Aggregate Percentage"]');
 
-    if (isBlank(stream.value)) {
-      showError(stream, "Stream is required", silent);
-      ok = false;
-    }
-    // ----- Board / University (REQUIRED) -----
+/* ---------- Degree ---------- */
+if (degree && isBlank(degree.value)) {
+  showError(degree, "Degree is required", silent);
+  ok = false;
+}
 
-    if (isBlank(board.value)) {
-      showError(board, "Board / University is required", silent);
-      ok = false;
-    }
-    if (!inRange(join.value, 1950, new Date().getFullYear())) {
-      showError(join, "Invalid year", silent);
-      ok = false;
-    }
+/* ---------- Stream ---------- */
+if (stream && isBlank(stream.value)) {
+  showError(stream, "Stream is required", silent);
+  ok = false;
+}
 
+/* ---------- Board / University ---------- */
+if (board && isBlank(board.value)) {
+  showError(board, "Board / University is required", silent);
+  ok = false;
+}
 
-    if (+leave.value <= +join.value) {
-      showError(leave, "Leaving must be after joining", silent);
-      ok = false;
-    }
+/* ---------- Joining Year ---------- */
+if (join && !inRange(join.value, 1950, new Date().getFullYear())) {
+  showError(join, "Invalid year", silent);
+  ok = false;
+}
 
-    // ----- 4-digit year enforcement -----
-    const yearPattern = /^\d{4}$/;
+/* ---------- Leaving Year ---------- */
+if (join && leave && +leave.value <= +join.value) {
+  showError(leave, "Leaving must be after joining", silent);
+  ok = false;
+}
 
-    if (!yearPattern.test(join.value)) {
-      showError(join, "Enter a valid 4‑digit year", silent);
-      ok = false;
-    }
+/* ---------- 4‑digit year enforcement ---------- */
+const yearPattern = /^\d{4}$/;
 
-    if (!yearPattern.test(leave.value)) {
-      showError(leave, "Enter a valid 4‑digit year", silent);
-      ok = false;
-    }
+if (join && !yearPattern.test(join.value)) {
+  showError(join, "Enter a valid 4‑digit year", silent);
+  ok = false;
+}
 
+if (leave && !yearPattern.test(leave.value)) {
+  showError(leave, "Enter a valid 4‑digit year", silent);
+  ok = false;
+}
 
-    // ----- Aggregate Percentage (REQUIRED) -----
-    if (isBlank(percent.value)) {
-      showError(percent, "Aggregate percentage is required", silent);
-      ok = false;
-    } else if (+percent.value < 0 || +percent.value > 100) {
-      showError(percent, "Percentage must be between 0 and 100", silent);
-      ok = false;
-    }
+/* ---------- Aggregate Percentage ---------- */
+if (percent && isBlank(percent.value)) {
+  showError(percent, "Aggregate percentage is required", silent);
+  ok = false;
+} else if (percent && (+percent.value < 0 || +percent.value > 100)) {
+  showError(percent, "Percentage must be between 0 and 100", silent);
+  ok = false;
+}
 
-    step.querySelectorAll("textarea").forEach(t => {
-      if (t.value.length > 500) {
-        showError(t, "Max 500 characters", silent);
-        ok = false;
-      }
-    });
+/* ---------- Textarea length ---------- */
+step.querySelectorAll("textarea").forEach(t => {
+  if (t.value.length > 500) {
+    showError(t, "Max 500 characters", silent);
+    ok = false;
+  }
+});
+
 
     // ===== Conditional Skill Textareas (Yes → Details Required) =====
     // Pattern: <select> immediately followed by a <textarea>
 
-    const conditionalPairs = [
-      {
-        question: "Member of Professional Body / Society?",
-        selectIndex: 0
-      },
-      {
-        question: "Special Honors / Scholarships?",
-        selectIndex: 1
-      }
-    ];
+    // const conditionalPairs = [
+    //   {
+    //     question: "Member of Professional Body / Society?",
+    //     selectIndex: 0
+    //   },
+    //   {
+    //     question: "Special Honors / Scholarships?",
+    //     selectIndex: 1
+    //   }
+    // ];
 
-    const extracurricular = step.querySelector(
-      'textarea[placeholder^="Literary"]'
+
+    const literary = document.getElementById("activityLiterary");
+    const sports = document.getElementById("activitySports");
+    const hobbies = document.getElementById("activityHobbies");
+    const extraError = document.getElementById("extraCurricularError");
+
+    if (
+      !literary?.value.trim() &&
+      !sports?.value.trim() &&
+      !hobbies?.value.trim()
+    ) {
+      if (extraError) extraError.style.display = "block";
+
+      [literary, sports, hobbies].forEach(el => {
+        if (el) el.classList.add("error");
+      });
+
+      ok = false;
+    } else {
+      if (extraError) extraError.style.display = "none";
+
+      [literary, sports, hobbies].forEach(el => {
+        if (el) el.classList.remove("error");
+      });
+    }
+
+
+    if (!validateStep3Languages()) {
+      ok = false;
+    }
+
+    const motherTongueSelected = document.querySelector(
+      "#languageTable input[name='motherTongue']:checked"
     );
-    if (isBlank(extracurricular.value)) {
-      showError(extracurricular, "Extra‑curricular activities required", silent);
+
+    if (!motherTongueSelected) {
+      showStepError(step, "Please select a mother tongue language");
       ok = false;
     }
 
-    const languages = step.querySelector(
-      'textarea[placeholder="Languages"]'
-    );
-    if (isBlank(languages.value)) {
-      showError(languages, "Languages known is required", silent);
-      ok = false;
-    }
+ const strengths = step.querySelector('textarea[placeholder="Strengths"]');
+const weaknesses = step.querySelector('textarea[placeholder="Weaknesses"]');
 
-    const strengths = step.querySelector('textarea[placeholder="Strengths"]');
-    const weaknesses = step.querySelector('textarea[placeholder="Weaknesses"]');
+if (!strengths || isBlank(strengths.value)) {
+  showError(strengths, "Strengths are required", silent);
+  ok = false;
+}
 
-    if (isBlank(strengths.value)) {
-      showError(strengths, "Strengths are required", silent);
-      ok = false;
-    }
+if (!weaknesses || isBlank(weaknesses.value)) {
+  showError(weaknesses, "Weaknesses are required", silent);
+  ok = false;
+}
 
-    if (isBlank(weaknesses.value)) {
-      showError(weaknesses, "Weaknesses are required", silent);
-      ok = false;
-    }
+
     // Get all selects in Step-3
     step.querySelectorAll("select + textarea").forEach(textarea => {
       const select = textarea.previousElementSibling;
@@ -1303,9 +1518,16 @@ if (uan && !/^\d{12}$/.test(uan.value)) {
   ////////////////////////////////////////
   /*-----------------------Step-6--------------------------- */
   ////////////////////////////////////////
-  function validateStep6() {
+  function validateStep6(silent = false) {
+    const step = steps[5];
+
+    if (!mediclaimConsent.value) {
+      showStepError(step, "Please select Mediclaim consent", silent);
+      return false;
+    }
     return true;
   }
+
   function populateMediclaimStep(data) {
 
     // ===== Header / simple bindings =====
@@ -1349,6 +1571,32 @@ if (uan && !/^\d{12}$/.test(uan.value)) {
       tbody.appendChild(tr);
     });
   }
+  const mediclaimYes = document.getElementById("mediclaimYes");
+  const mediclaimNo = document.getElementById("mediclaimNo");
+  const mediclaimDetails = document.getElementById("mediclaimDetails");
+  const mediclaimConsent = document.getElementById("mediclaimConsent");
+
+  function updateMediclaimVisibility() {
+    if (!mediclaimYes || !mediclaimNo || !mediclaimDetails) return;
+
+    if (mediclaimYes.checked) {
+      mediclaimDetails.style.display = "block";
+      mediclaimConsent.value = "Yes";
+    } else if (mediclaimNo.checked) {
+      mediclaimDetails.style.display = "none";
+      mediclaimConsent.value = "No";
+    } else {
+      mediclaimDetails.style.display = "none";
+      mediclaimConsent.value = "";
+    }
+  }
+
+  if (mediclaimYes && mediclaimNo && mediclaimDetails) {
+    mediclaimYes.addEventListener("change", updateMediclaimVisibility);
+    mediclaimNo.addEventListener("change", updateMediclaimVisibility);
+    updateMediclaimVisibility();
+  }
+
 
   /* 🔹 SIDEBAR / STEPPER CLICK SUPPORT */
   const validators = [
@@ -1541,40 +1789,40 @@ if (uan && !/^\d{12}$/.test(uan.value)) {
 
     if (!draft) return;
 
-isRestoringDraft = true;
+    isRestoringDraft = true;
 
-// restore normal fields
-Object.entries(draft.fields || {}).forEach(([key, val]) => {
-  if (key === "pan" || key === "aadhaar") return;
+    // restore normal fields
+    Object.entries(draft.fields || {}).forEach(([key, val]) => {
+      if (key === "pan" || key === "aadhaar") return;
 
-  const el =
-    document.getElementById(key) ||
-    document.querySelector(`[name="${key}"]`);
+      const el =
+        document.getElementById(key) ||
+        document.querySelector(`[name="${key}"]`);
 
-  if (!el) return;
+      if (!el) return;
 
-  if (el.type === "checkbox") el.checked = val;
-  else if (el.type === "radio") {
-    const r = document.querySelector(`[name="${el.name}"][value="${val}"]`);
-    if (r) r.checked = true;
-  } else {
-    el.value = val;
-  }
-});
+      if (el.type === "checkbox") el.checked = val;
+      else if (el.type === "radio") {
+        const r = document.querySelector(`[name="${el.name}"][value="${val}"]`);
+        if (r) r.checked = true;
+      } else {
+        el.value = val;
+      }
+    });
 
-// restore PAN
-if (draft.fields?.pan && panInput) {
-  realPan = draft.fields.pan;
-  panInput.value = realPan.slice(0, 2) + "****" + realPan.slice(6);
-}
+    // restore PAN
+    if (draft.fields?.pan && panInput) {
+      realPan = draft.fields.pan;
+      panInput.value = realPan.slice(0, 2) + "****" + realPan.slice(6);
+    }
 
-// restore Aadhaar
-if (draft.fields?.aadhaar && aadhaarInput) {
-  realAadhaar = draft.fields.aadhaar;
-  aadhaarInput.value = "XXXXXXXX" + realAadhaar.slice(8);
-}
+    // restore Aadhaar
+    if (draft.fields?.aadhaar && aadhaarInput) {
+      realAadhaar = draft.fields.aadhaar;
+      aadhaarInput.value = "XXXXXXXX" + realAadhaar.slice(8);
+    }
 
-isRestoringDraft = false;
+    isRestoringDraft = false;
 
 
     if (typeof draft.step === "number") {
@@ -1583,13 +1831,16 @@ isRestoringDraft = false;
 
     toggleExperienceDependentSections();
     autoCalculateSalary();
-
+    updateMediclaimVisibility();
+    syncAllFamilyRows();
+    updateFamilyRelationshipOptions();
     updateUI();
-    setTimeout(() => {
+
+    requestAnimationFrame(() => {
       if (dobInput?.value) {
         dobInput.dispatchEvent(new Event("change"));
       }
-    }, 0);
+    });
 
   })();
 
@@ -1599,25 +1850,25 @@ isRestoringDraft = false;
   });
 
   window.addEventListener("online", async () => {
-  const pending = await loadOfflineSubmissions(); // your IndexedDB helper
-  if (!pending?.length) return;
+    const pending = await loadOfflineSubmissions(); // your IndexedDB helper
+    if (!pending?.length) return;
 
-  for (const payload of pending) {
-    try {
-      const res = await fetch("http://localhost:8080/candidates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+    for (const payload of pending) {
+      try {
+        const res = await fetch("http://localhost:8080/candidates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
 
-      if (res.ok) {
-        await removeOfflineSubmission(payload.id);
+        if (res.ok) {
+          await removeOfflineSubmission(payload.id);
+        }
+      } catch (e) {
+        console.warn("Sync failed for one entry", e);
       }
-    } catch (e) {
-      console.warn("Sync failed for one entry", e);
     }
-  }
-});
+  });
 
 
   updateUI();
