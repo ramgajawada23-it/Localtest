@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -24,13 +25,13 @@
     <aside class="sidebar">
       <h3 class="sidebar-title">About you</h3>
       <ul class="step-menu">
-  <li onclick="goToStep(0)">Personal</li>
-  <li onclick="goToStep(1)">Family Details</li>
-  <li onclick="goToStep(2)">Education & Skills</li>
-  <li onclick="goToStep(3)">Experience</li>
-  <li onclick="goToStep(4)">Salary & Declaration</li>
-  <li onclick="goToStep(5)">Mediclaim Circular</li> <!-- ✅ NEW -->
-</ul>
+        <li onclick="goToStep(0)">Personal</li>
+        <li onclick="goToStep(1)">Family Details</li>
+        <li onclick="goToStep(2)">Education & Skills</li>
+        <li onclick="goToStep(3)">Experience</li>
+        <li onclick="goToStep(4)">Salary & Declaration</li>
+        <li onclick="goToStep(5)">Mediclaim Circular</li> <!-- ✅ NEW -->
+      </ul>
 
     </aside>
 
@@ -51,7 +52,7 @@
         <section class="form-step active">
 
           <h3 class="section-title">Personal & KYC Details</h3>
-
+          <input type="hidden" id="employeeId" name="employeeId">
           <!-- Name Row -->
           <div class="grid-2">
             <div class="form-field">
@@ -182,7 +183,7 @@
 
           <div class="grid-3">
             <div class="form-field">
-              <select name="" id="">
+              <select id="bloodGroup" name="bloodGroup">
                 <option value="">Select Blood Group</option>
                 <option>A+</option>
                 <option>A-</option>
@@ -257,6 +258,11 @@
             </div>
           </div>
           <div class="form-field">
+ <!-- <span class="required"></span> -->
+  <input type="email" id="email" name="email" placeholder="Enter Email Address" autocomplete="email">
+  <small class="error-text" style="display:none;"></small>
+</div>
+          <div class="form-field">
             <input type="tel" placeholder="Mobile Number" id="mobile2" class="mobile-input" maxlength="10"
               inputmode="numeric">
           </div>
@@ -287,11 +293,12 @@
                   <div class="form-field">
                     <select name="family[0][relationship]">
                       <option value="">Select</option>
-                      <option>Father</option>
-                      <option>Mother</option>
-                      <option>Brother</option>
-                      <option>Sister</option>
-                      <option>Spouse</option>
+                      <option value="Father">Father</option>
+                      <option value="Mother">Mother</option>
+                      <option value="Brother">Brother</option>
+                      <option value="Sister">Sister</option>
+                      <option value="Spouse">Spouse</option>
+
                     </select>
                   </div>
                 </td>
@@ -347,33 +354,33 @@
           <!-- College / Board -->
           <div class="grid-2">
             <div class="form-field">
-              <input type="text" placeholder="College / School Name">
+              <input type="text" id="collegeName" placeholder="College / School Name">
             </div>
             <div class="form-field">
-              <input type="text" placeholder="Board / University">
+              <input type="text" id="university" placeholder="Board / University">
             </div>
           </div>
 
           <!-- Degree / Stream -->
           <div class="grid-2">
             <div class="form-field">
-              <input type="text" placeholder="Degree / Exam">
+              <input type="text" id="degree" placeholder="Degree / Exam">
             </div>
             <div class="form-field">
-              <input type="text" placeholder="Stream / Branch">
+              <input type="text" id="stream" placeholder="Stream / Branch">
             </div>
           </div>
 
           <!-- Years & Percentage -->
           <div class="grid-3">
             <div class="form-field">
-              <input type="number" placeholder="Joining Year">
+              <input type="number" id="joinYear" placeholder="Joining Year">
             </div>
             <div class="form-field">
-              <input type="number" placeholder="Leaving Year">
+              <input type="number" id="leaveYear" placeholder="Leaving Year">
             </div>
             <div class="form-field">
-              <input type="number" placeholder="Aggregate Percentage">
+              <input type="number" id="percentage" placeholder="Aggregate Percentage">
             </div>
           </div>
 
@@ -390,7 +397,7 @@
           <!-- Professional Body -->
           <div class="form-field">
             <label>Member of Professional Body / Society?</label>
-            <select>
+            <select  name="memberOfProfessionalBody">
               <option value="">Select</option>
               <option>Yes</option>
               <option>No</option>
@@ -402,7 +409,7 @@
           <!-- Honors -->
           <div class="form-field">
             <label>Special Honors / Scholarships?</label>
-            <select>
+            <select name="specialHonors">
               <option value="">Select</option>
               <option>Yes</option>
               <option>No</option>
@@ -417,34 +424,95 @@
             <textarea placeholder="Topics, dates, details"></textarea>
           </div>
 
-          <!-- Activities -->
-          <div class="form-field">
-            <label>Extra‑Curricular Activities</label>
-            <textarea placeholder="Literary / Cultural / Sports / Hobbies"></textarea>
+          <!-- Extra Curricular Activities -->
+          <div class="form-field" id="extraCurricularSection">
+            <label class="field-label">EXTRA CURRICULAR ACTIVITIES:</label>
+
+            <table class="activity-table">
+              <thead>
+                <tr>
+                  <th>Literary / Cultural</th>
+                  <th>Sports</th>
+                  <th>Hobbies</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <textarea id="activityLiterary" name="activityLiterary" placeholder="Literary / Cultural"
+                      rows="5"></textarea>
+                  </td>
+                  <td>
+                    <textarea id="activitySports" name="activitySports" placeholder="Sports" rows="5"></textarea>
+                  </td>
+                  <td>
+                    <textarea id="activityHobbies" name="activityHobbies" placeholder="Hobbies" rows="5"></textarea>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- ✅ FIELD LEVEL ERROR (REQUIRED) -->
+            <small class="error-text" id="extraCurricularError" style="display:none;">
+              Enter at least one Extra‑Curricular activity
+            </small>
           </div>
 
           <!-- Languages -->
           <div class="form-field">
-            <label>Languages Known</label>
-            <textarea placeholder="Languages"></textarea>
+            <table class="language-table" id="languageTable">
+              <thead>
+                <tr>
+                  <th>Language</th>
+                  <th>Speak</th>
+                  <th>Read</th>
+                  <th>Write</th>
+                  <th>Mother Tongue</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Fixed English -->
+                <tr>
+                  <td>English</td>
+                  <td><input type="checkbox" name="lang_english_speak"></td>
+                  <td><input type="checkbox" name="lang_english_read"></td>
+                  <td><input type="checkbox" name="lang_english_write"></td>
+                  <td><input type="radio" name="motherTongue" value="${index}">
+                  </td>
+                </tr>
+
+                <!-- Fixed Hindi -->
+                <tr>
+                  <td>Hindi</td>
+                  <td><input type="checkbox" name="lang_hindi_speak"></td>
+                  <td><input type="checkbox" name="lang_hindi_read"></td>
+                  <td><input type="checkbox" name="lang_hindi_write"></td>
+                  <td><input type="radio" name="motherTongue" value="${index}">
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <button type="button" id="addLanguageBtn" class="btn-add">
+              + Add Language
+            </button>
           </div>
+
 
           <!-- Strengths / Weaknesses / Values -->
           <div class="grid-3">
             <div class="form-field">
-              <textarea placeholder="Strengths"></textarea>
+              <textarea id="strengths" name="strengths" placeholder="List three of your major strengths "></textarea>
             </div>
             <div class="form-field">
-              <textarea placeholder="Weaknesses"></textarea>
+              <textarea id="Weaknesses" name="Weaknesses" placeholder="List your major weaknesses "></textarea>
             </div>
             <div class="form-field">
-              <textarea placeholder="Values"></textarea>
+              <textarea id="Values" name="Values"
+                placeholder="Mention three things/ concepts/ practices/ ideas etc. that you value most in your life. "></textarea>
             </div>
           </div>
         </section>
-
-
-
 
         <!-- ================= STEP 4 ================= -->
         <section class="form-step">
@@ -519,8 +587,6 @@
           <br>
 
           <div id="assignmentsHandled">
-
-
             <h3 class="section-title">ASSIGNMENTS HANDLED</h3>
             <h6>(For Sales / Marketing / Product Management Position)</h6>
 
@@ -754,131 +820,146 @@
         </section>
 
         <!-- ================= STEP 6 ================= -->
-    <section class="form-step step-circular" data-step="6">
-  <main class="page a4 portrait">
+        <section class="form-step step-circular" data-step="6">
+          <input type="hidden" id="mediclaimConsent" name="mediclaimConsent">
+          <main class="page a4 portrait">
 
-    <header class="page-header">
-      <div class="org">
-        <div class="org-name">NATCO PHARMA LIMITED</div>
-        <div class="org-sub">Field Force (Additions)</div>
-      </div>
-      <h1 class="doc-title">CIRCULAR</h1>
-      <div class="doc-subtitle">
-        Group Mediclaim – Collection of Family Details
-      </div>
-    </header>
+            <!-- HEADER -->
+            <header class="page-header">
+              <h1 class="doc-title">CIRCULAR</h1>
 
-    <section class="intro">
-      <p>Dear All,</p>
-      <p>
-        It is proposed to cover the Field Employees under Group Mediclaim Policy.
-        Therefore, you are requested to provide the family details immediately.
-      </p>
-    </section>
+              <div class="org">
+                <div class="org-sub">NATCO PHARMA LT</div>
+                <div class="org-name">To</div>
+                <div class="org-sub">Field Force (Additions)</div>
+              </div>
 
-    <!-- EMPLOYEE DETAILS -->
-    <section class="employee-block">
-      <h2 class="section-title">Employee Details</h2>
+              <br />
 
-      <div class="grid grid-3">
-        <div class="field">
-          <label>Name of the Employee</label>
-          <div class="line" data-bind="firstName lastName"></div>
-        </div>
+              <!-- Mediclaim Choice -->
+              <div class="enrol-question">
+                <span>Are you interested to enrol in Company Mediclaim policy?</span>
+                <label class="checkline">
+                  <input type="radio" name="mediclaim" id="mediclaimYes" value="Yes">
+                  Yes
+                </label>
 
-        <div class="field">
-          <label>D.O.B.</label>
-          <div class="line short" data-bind="dob"></div>
-        </div>
+                <label class="checkline">
+                  <input type="radio" name="mediclaim" id="mediclaimNo" value="No">
+                  No
+                </label>
+              </div>
+              <hr>
 
-        <div class="field">
-          <label>Emp. No.</label>
-          <div class="line short" data-bind="employeeId"></div>
-        </div>
-      </div>
-    </section>
+              <div id="mediclaimDetails" style="display:none;">
+                <!-- INTRO -->
+                <section class="intro">
+                  <p>Dear All,</p>
+                  <p>
+                    It is proposed to cover the Field Employees under Group Mediclaim Policy.
+                    Therefore, you are requested to provide the family details immediately.
+                  </p>
+                </section>
 
-    <!-- FAMILY TABLE -->
-    <section class="family-block">
-      <h2 class="section-title">
-        Family Members details <span class="muted">(As Per Aadhaar)</span>
-      </h2>
+                <!-- EMPLOYEE DETAILS -->
+                <section class="employee-block">
+                  <h2 class="section-title">Employee Details</h2>
 
-      <div class="table-wrap">
-        <table class="table family-table">
-          <thead>
-            <tr>
-              <th>S.No.</th>
-              <th>Relation</th>
-              <th>Gender</th>
-              <th>Name</th>
-              <th>Date of Birth</th>
-            </tr>
-          </thead>
-          <tbody id="mediclaimFamilyBody">
-            <!-- JS will populate -->
-          </tbody>
-        </table>
-      </div>
+                  <div class="grid grid-3">
+                    <div class="field">
+                      <label>Name of the Employee</label>
+                      <div class="line" data-bind="firstName lastName"></div>
+                    </div>
 
-      <div class="signature-row">
-        <div class="sig-box">
-          <span>Signature of the Employee</span>
-          <div class="line"></div>
-        </div>
-        <div class="sig-box">
-          <span>Date</span>
-          <div class="line short" data-bind="today"></div>
-        </div>
-      </div>
-    </section>
+                    <div class="field">
+                      <label>D.O.B.</label>
+                      <div class="line short" data-bind="dob"></div>
+                    </div>
 
-    <!-- NOTE -->
-    <section class="note-block">
-      <h2 class="section-title">Note</h2>
-      <p>
-        Mediclaim enrollment is allowed only at the time of joining or renewal.
-        Mid‑term requests will not be processed.
-      </p>
+                    <div class="field">
+                      <label>Emp. No.</label>
+                      <div class="line short" data-bind="employeeId"></div>
+                    </div>
+                  </div>
+                </section>
 
-      <table class="table deduction-table table-wrap narrow">
-        <thead>
-          <tr>
-            <th>Grade</th>
-            <th class="right">Monthly Deduction (₹)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>BDE(T) & BDE</td>
-            <td class="right">1,000</td>
-          </tr>
-          <tr>
-            <td>ASE / ABDM / RMM</td>
-            <td class="right">1,400</td>
-          </tr>
-          <tr>
-            <td>Sr. RMM & ABOVE</td>
-            <td class="right">1,600</td>
-          </tr>
-        </tbody>
-      </table>
+                <!-- FAMILY DETAILS -->
+                <section class="family-block">
+                  <h2 class="section-title">
+                    Family Members details <span class="muted">(As Per Aadhaar)</span>
+                  </h2>
 
-      <div class="enrol-question">
-        <span>Interested to enrol in Mediclaim?</span>
-        <label class="checkline"><span class="box"></span> Yes</label>
-        <label class="checkline"><span class="box"></span> No</label>
-      </div>
-    </section>
+                  <div class="table-wrap">
+                    <table class="table family-table">
+                      <thead>
+                        <tr>
+                          <th>S.No.</th>
+                          <th>Relation</th>
+                          <th>Gender</th>
+                          <th>Name</th>
+                          <th>Date of Birth</th>
+                        </tr>
+                      </thead>
+                      <tbody id="mediclaimFamilyBody">
+                        <!-- JS will auto‑populate from Step‑2 -->
+                      </tbody>
+                    </table>
+                  </div>
 
-    <footer class="page-footer">
-      <div>CIRCULAR – Group Mediclaim</div>
-      <div>Page 12</div>
-    </footer>
+                  <div class="signature-row">
+                    <div class="sig-box">
+                      <span>Signature of the Employee</span>
+                      <div class="line"></div>
+                    </div>
 
-  </main>
-</section>
+                    <div class="sig-box">
+                      <span>Date</span>
+                      <div class="line short" data-bind="today"></div>
+                    </div>
+                  </div>
+                </section>
 
+                <!-- NOTE -->
+                <section class="note-block">
+                  <h2 class="section-title">Note</h2>
+                  <p>
+                    Our Group Mediclaim enrollment will be possible at the time of joining
+                    or at the time of renewal. Mid‑term requests will not be processed.
+                  </p>
+
+                  <br />
+
+                  <p>
+                    If you are interested to avail Mediclaim facility, every month
+                    grade‑wise deduction details are as follows for your reference:
+                  </p>
+
+                  <table class="table deduction-table table-wrap narrow">
+                    <thead>
+                      <tr>
+                        <th>Grade</th>
+                        <th class="right">Monthly Deduction (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>BDE(T) & BDE</td>
+                        <td class="right">1,000</td>
+                      </tr>
+                      <tr>
+                        <td>ASE / ABDM / RMM</td>
+                        <td class="right">1,400</td>
+                      </tr>
+                      <tr>
+                        <td>Sr. RMM & ABOVE</td>
+                        <td class="right">1,600</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </section>
+              </div>
+          </main>
+        </section>
 
         <!-- Navigation -->
         <div class="nav-buttons">
