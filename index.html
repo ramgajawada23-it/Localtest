@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -155,7 +156,7 @@
 
             <div class="form-field">
               <input type="tel" placeholder="Permanent Mobile Number" id="mobile1" class="mobile-input" maxlength="10"
-                inputmode="numeric">
+                inputmode="numeric" readonly>
             </div>
           </div>
 
@@ -257,13 +258,18 @@
             </div>
           </div>
           <div class="form-field">
+            <!-- <span class="required"></span> -->
+            <input type="email" id="email" name="email" placeholder="Enter Email Address" autocomplete="email">
+            <small class="error-text" style="display:none;"></small>
+          </div>
+          <div class="form-field">
             <input type="tel" placeholder="Mobile Number" id="mobile2" class="mobile-input" maxlength="10"
-              inputmode="numeric">
+              inputmode="numeric" readonly>
           </div>
         </section>
 
         <!-- ================= STEP 2 ================= -->
-        <section class="form-step">
+        <section class="form-step" id="step2">
           <h3 class="section-title">Details of Family Members</h3>
 
           <table class="family-table">
@@ -285,14 +291,13 @@
 
                 <td>
                   <div class="form-field">
-                    <select name="family[0][relationship]">
+                    <select name="family[${index}][relationship]">
                       <option value="">Select</option>
                       <option value="Father">Father</option>
                       <option value="Mother">Mother</option>
                       <option value="Brother">Brother</option>
                       <option value="Sister">Sister</option>
                       <option value="Spouse">Spouse</option>
-
                     </select>
                   </div>
                 </td>
@@ -321,13 +326,13 @@
 
                 <td>
                   <div class="form-field">
-                    <input type="text" name="family[0][occupation]" placeholder="Occupation">
+                    <input type="text" name="family[0][occupation]" placeholder="Occupation" required>
                   </div>
                 </td>
 
                 <td>
                   <div class="form-field">
-                    <input type="number" name="family[0][income]" placeholder="Monthly Income" min="0">
+                    <input type="number" name="family[0][income]" placeholder="Monthly Income" min="0" required>
                   </div>
                 </td>
               </tr>
@@ -345,37 +350,28 @@
 
           <h3 class="section-title">Education & Qualifications (Graduation)</h3>
 
-          <!-- College / Board -->
-          <div class="grid-2">
-            <div class="form-field">
-              <input type="text" id="collegeName" placeholder="College / School Name">
-            </div>
-            <div class="form-field">
-              <input type="text" id="university" placeholder="Board / University">
-            </div>
-          </div>
+          <div class="education-section">
+            <table class="education-table">
+              <thead>
+                <tr>
+                  <th>College / School</th>
+                  <th>Board / University</th>
+                  <th>Degree / Exam</th>
+                  <th>Stream</th>
+                  <th>Joining Year</th>
+                  <th>Leaving Year</th>
+                  <th>Aggregate %</th>
+                </tr>
+              </thead>
 
-          <!-- Degree / Stream -->
-          <div class="grid-2">
-            <div class="form-field">
-              <input type="text" id="degree" placeholder="Degree / Exam">
-            </div>
-            <div class="form-field">
-              <input type="text" id="stream" placeholder="Stream / Branch">
-            </div>
-          </div>
+              <tbody id="educationTableBody">
+                <!-- First row will be inserted by JS -->
+              </tbody>
+            </table>
 
-          <!-- Years & Percentage -->
-          <div class="grid-3">
-            <div class="form-field">
-              <input type="number" id="joinYear" placeholder="Joining Year">
-            </div>
-            <div class="form-field">
-              <input type="number" id="leaveYear" placeholder="Leaving Year">
-            </div>
-            <div class="form-field">
-              <input type="number" id="percentage" placeholder="Aggregate Percentage">
-            </div>
+            <button type="button" id="addEducationBtn" class="btn-add">
+              + Add More
+            </button>
           </div>
 
           <hr>
@@ -391,7 +387,7 @@
           <!-- Professional Body -->
           <div class="form-field">
             <label>Member of Professional Body / Society?</label>
-            <select>
+            <select name="memberOfProfessionalBody">
               <option value="">Select</option>
               <option>Yes</option>
               <option>No</option>
@@ -403,7 +399,7 @@
           <!-- Honors -->
           <div class="form-field">
             <label>Special Honors / Scholarships?</label>
-            <select>
+            <select name="specialHonors">
               <option value="">Select</option>
               <option>Yes</option>
               <option>No</option>
@@ -452,13 +448,8 @@
             </small>
           </div>
 
-
-
-
           <!-- Languages -->
           <div class="form-field">
-            <label class="field-label">Languages Known</label>
-
             <table class="language-table" id="languageTable">
               <thead>
                 <tr>
@@ -586,8 +577,6 @@
           <br>
 
           <div id="assignmentsHandled">
-
-
             <h3 class="section-title">ASSIGNMENTS HANDLED</h3>
             <h6>(For Sales / Marketing / Product Management Position)</h6>
 
@@ -785,7 +774,6 @@
 
           <h3 class="section-sep">DECLARATION</h3>
 
-
           <div class="declaration-text">
             <p class="declaration-paragraph">
               I hereby declare and certify that all the information provided by me in this
@@ -850,7 +838,7 @@
                   No
                 </label>
               </div>
-
+              <hr>
 
               <div id="mediclaimDetails" style="display:none;">
                 <!-- INTRO -->
@@ -923,7 +911,6 @@
                 <!-- NOTE -->
                 <section class="note-block">
                   <h2 class="section-title">Note</h2>
-
                   <p>
                     Our Group Mediclaim enrollment will be possible at the time of joining
                     or at the time of renewal. Mid‑term requests will not be processed.

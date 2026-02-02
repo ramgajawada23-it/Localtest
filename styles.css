@@ -43,7 +43,7 @@ body {
   padding: 40px;
   width: 350px;
   border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
 
 .login-title {
@@ -60,6 +60,7 @@ body {
 
 .form-field {
   margin-bottom: 20px;
+
 }
 
 .form-field label {
@@ -78,24 +79,24 @@ body {
 .login-btn {
   width: 100%;
   padding: 12px;
-  background:#47749b;
+  background: #47749b;
   border: none;
   color: white;
   font-size: 16px;
   border-radius: 4px;
   margin-top: 20px;
-  cursor: pointer;  
+  cursor: pointer;
 }
 
 .login-btn:hover {
-  background:#1c486e;
+  background: #1c486e;
 }
 
 
 /* Wrap inputs in a field container */
 .form-field {
   position: relative;
-  margin-bottom:12px;
+  margin-bottom: 12px;
   /* keeps layout stable */
 }
 
@@ -115,12 +116,13 @@ body {
 
 .form-step {
   position: relative;
-  padding-bottom: 80px; /* space for error + buttons */
-  
+  padding-bottom: 80px;
+  /* space for error + buttons */
+  display: none;
 }
 
 
-textarea.conditional-details {
+.conditional-details {
   display: none;
 }
 
@@ -319,9 +321,6 @@ textarea.conditional-details {
 
 
 /* ================= FORM STEPS ================= */
-.form-step {
-  display: none;
-}
 
 .form-step.active {
   display: block;
@@ -509,16 +508,12 @@ textarea.error {
   user-select: none;
 }
 
-/* .showSummaryError{
-  font-display: block;
-  color: #be2525;
-} */
-
 .already-filled {
   max-width: 420px;
   margin: 120px auto;
   text-align: center;
 }
+
 .already-filled button {
   padding: 10px 20px;
   font-size: 16px;
@@ -546,11 +541,24 @@ textarea.error {
   display: none;
 }
 
+.family-table td:nth-child(3) {
+  color: #333;
+  font-weight: 600;
+  cursor: not-allowed;
+}
+
+.doc-title {
+  font-size: large;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
 
 .language-table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 10px;
+  margin-top: 28px;
 }
 
 .language-table th,
@@ -566,6 +574,7 @@ textarea.error {
 }
 
 .btn-add {
+  margin-top: 10px;
   padding: 6px 12px;
   border: 1px solid rgb(62, 57, 82);
   background: white;
@@ -574,7 +583,7 @@ textarea.error {
 }
 
 .btn-add:hover {
-  background:#47749b;
+  background: #47749b;
   color: white;
 }
 
@@ -582,6 +591,7 @@ textarea.error {
 .activity-table {
   width: 100%;
   border-collapse: collapse;
+
 }
 
 .activity-table th,
@@ -597,4 +607,130 @@ textarea.error {
   box-sizing: border-box;
 }
 
+.employee-block {
+  margin-bottom: 24px;
+}
+
+.employee-block .section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 6px;
+}
+
+.grid {
+  display: grid;
+  gap: 12px;
+}
+
+.field label {
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.field .line {
+  min-height: 18px;
+  border-bottom: 1px solid #000;
+  font-size: 14px;
+  padding-bottom: 2px;
+}
+
+.field .line.short {
+  max-width: 120px;
+}
+
+.deduction-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  font-size: 14px;
+}
+
+.deduction-table th,
+.deduction-table td {
+  border: 1px solid #000;
+  padding: 8px 10px;
+}
+
+.deduction-table th {
+  background-color: #f3f3f3;
+  font-weight: 600;
+  text-align: left;
+}
+
+.deduction-table .right {
+  text-align: right;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table-wrap.narrow {
+  max-width: 420px;
+}
+
+
+@media print {
+  .deduction-table th {
+    background-color: #eaeaea !important;
+  }
+}
+
+/* .form-step.step-circular{
+  background-color: white;
+} */
+
+/* Prevent row height jump */
+.education-table td {
+  vertical-align: top;
+  padding-bottom: 22px;
+}
+
+
+.education-section {
+  margin-top: 15px;
+}
+
+.education-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.education-table th,
+.education-table td {
+  border: 1px solid #ddd;
+  padding: 4px;
+  text-align: center;
+}
+
+.education-table th {
+  font-weight: 500;
+}
+
+.education-table input {
+  width: 100%;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.btn-add {
+  margin-top: 10px;
+  padding: 6px 12px;
+}
+
+.btn-delete {
+  background: #0c0303;
+  color: #fff;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.btn-delete:hover {
+  opacity: 0.85;
+}
 

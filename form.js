@@ -1,3 +1,6 @@
+// form.js
+let isOnline = navigator.onLine;
+
 function getCandidateFullName() {
   const fn = document.getElementById("firstName")?.value || "";
   const ln = document.getElementById("lastName")?.value || "";
@@ -6,6 +9,130 @@ function getCandidateFullName() {
 /* =========================================================
   GLOBAL HELPERS
 ========================================================= */
+window.addEventListener("online", () => {
+  isOnline = true;
+  alert("Back online");
+  syncOfflineSubmissions();
+});
+
+window.addEventListener("offline", () => {
+  isOnline = false;
+  alert("You are Offline. You can continue filling the form");
+});
+
+window.addEventListener("online", () => {
+  alert("Back online");
+  syncOfflineSubmissions();
+});
+
+window.addEventListener("offline", () => {
+  alert("You are Offline. You can continue filling the form");
+});
+
+function collectFormData() {
+  const data = {};
+  document.querySelectorAll("input, select, textarea").forEach(el => {
+    if (!el.name) return;
+
+    if (el.type === "radio") {
+      if (el.checked) data[el.name] = el.value;
+    } else if (el.type === "checkbox") {
+      data[el.name] = el.checked;
+    } else {
+      data[el.name] = el.value;
+    }
+  });
+  return data;
+}
+
+function restoreDraft() {
+  const saved = localStorage.getItem("formDraft");
+  if (!saved) return;
+
+  const data = JSON.parse(saved);
+
+  document.querySelectorAll("input, select, textarea").forEach(el => {
+    if (!el.name || !(el.name in data)) return;
+
+    if (el.type === "radio") {
+      el.checked = el.value === data[el.name];
+    } else if (el.type === "checkbox") {
+      el.checked = data[el.name];
+    } else {
+      el.value = data[el.name];
+    }
+  });
+}
+
+function isAlphaOnly(value) {
+  return /^[A-Za-z\s.]+$/.test(value.trim());
+}
+
+function isYear(value) {
+  return /^\d{4}$/.test(value);
+}
+
+
+function submitOnline(data) {
+  fetch("http://localhost:8080/candidates", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  })
+    .then(res => {
+      if (!res.ok) throw new Error("Server error");
+      return res.json();
+    })
+    .then(() => {
+      alert("Form submitted successfully");
+      localStorage.removeItem("formDraft");
+      clearAutosave();
+    })
+    .catch(err => {
+      // Internet exists but backend failed
+      console.warn("Online but server unreachable", err);
+
+      saveOfflineSubmission(data);
+      alert("Server unreachable. Saved offline & will sync later.");
+      clearAutosave();
+    });
+}
+
+function saveOfflineSubmission(data) {
+  const queue = JSON.parse(localStorage.getItem("offlineQueue")) || [];
+  queue.push({
+    data,
+    time: new Date().toISOString()
+  });
+  localStorage.setItem("offlineQueue", JSON.stringify(queue));
+}
+
+function syncOfflineSubmissions() {
+  if (!navigator.onLine) return;
+
+  const queue = JSON.parse(localStorage.getItem("offlineQueue")) || [];
+  if (queue.length === 0) return;
+
+  queue.forEach(item => {
+    fetch("http://localhost:8080/candidates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(item.data)
+    })
+      .then(res => {
+        if (!res.ok) throw new Error();
+      })
+      .then(() => {
+        console.log("Synced offline form");
+      })
+      .catch(() => {
+        // keep it if still failing
+      });
+  });
+
+  localStorage.removeItem("offlineQueue");
+}
+
 const isFutureDate = d => d && new Date(d) > new Date();
 const minLen = (v, l) => v && v.trim().length >= l;
 // const onlyNumbers = v => /^\d+$/.test(v);
@@ -70,8 +197,8 @@ window.addFamilyRow = () => {
     syncFamilyRow(tr);
     updateFamilyRelationshipOptions(); // ✅ ADD THIS
   });
-
 };
+
 
 function syncFamilyRow(row) {
   const rel = row.querySelector("select[name*='relationship']");
@@ -85,14 +212,12 @@ function syncFamilyRow(row) {
 
   // 🔴 ALWAYS reset first
   nameInput.readOnly = false;
-  nameInput.value = "";
 
   if (rel.value === "Father") {
-    if (fatherName) nameInput.value = fatherName;
+    nameInput.value = fatherName || "";
     nameInput.readOnly = true;
-  }
-  else if (rel.value === "Mother") {
-    if (motherName) nameInput.value = motherName;
+  } else if (rel.value === "Mother") {
+    nameInput.value = motherName || "";
     nameInput.readOnly = true;
   }
 
@@ -183,16 +308,17 @@ function fillMediclaimEmployeeDetails() {
   });
 }
 // run when entering step‑6
-function showStep(index) {
-  steps.forEach((step, i) => step.classList.toggle("active", i === index));
-  stepperSteps.forEach((circle, i) =>
-    circle.classList.toggle("active", i <= index)
-  );
-  prevBtn.style.display = index === 0 ? "none" : "inline-block";
-  nextBtn.style.display = index === TOTAL_STEPS - 1 ? "none" : "inline-block";
-  submitBtn.style.display = index === TOTAL_STEPS - 1 ? "inline-block" : "none";
-  if (index === 5) fillMediclaimEmployeeDetails(); // ✅ step‑6
-}
+// function showStep(index) {
+//   steps.forEach((step, i) => step.classList.toggle("active", i === index));
+//   stepperSteps.forEach((circle, i) =>
+//     circle.classList.toggle("active", i <= index)
+//   );
+//   prevBtn.style.display = index === 0 ? "none" : "inline-block";
+//   nextBtn.style.display = index === TOTAL_STEPS - 1 ? "none" : "inline-block";
+//   submitBtn.style.display = index === TOTAL_STEPS - 1 ? "inline-block" : "none";
+//   if (index === 5) fillMediclaimEmployeeDetails();
+//   fillMediclaimFamilyDetails();
+// }
 
 
 function initFamilyRow(row) {
@@ -208,6 +334,87 @@ function initFamilyRow(row) {
   syncFamilyRow(row);
   updateFamilyRelationshipOptions();
 }
+
+function ensureVisibleError(step) {
+  const err = step.querySelector(".error");
+  if (!err) {
+    console.warn("Validation failed but no field marked error");
+    shakeCurrentStep();
+  }
+}
+
+function fillMediclaimFamilyDetails() {
+  const tbody = document.getElementById("mediclaimFamilyBody");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+  let sno = 1;
+
+  const rows = document.querySelectorAll("#familyTableBody tr");
+
+  rows.forEach(row => {
+    const relation = row.querySelector("select[name*='relationship']")?.value || "";
+    const name = row.querySelector("input[name*='name']")?.value || "";
+    const dob = row.querySelector("input[name*='dob']")?.value || "";
+
+    if (!relation || !name) return;
+
+    let gender = "";
+
+    switch (relation) {
+      case "Father":
+      case "Brother":
+        gender = "Male";
+        break;
+
+      case "Mother":
+      case "Sister":
+        gender = "Female";
+        break;
+
+      case "Spouse":
+        // Use candidate gender to infer spouse gender
+        const candidateGender =
+          document.querySelector("input[name='gender']:checked")?.value;
+
+        if (candidateGender === "Male") gender = "Female";
+        else if (candidateGender === "Female") gender = "Male";
+        else gender = "";
+        break;
+
+      default:
+        gender = "";
+    }
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${sno++}</td>
+      <td>${relation}</td>
+      <td>${gender}</td>
+      <td>${name}</td>
+      <td>${dob}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+document.addEventListener("change", e => {
+  if (!e.target.matches("select[name*='relationship']")) return;
+
+  if (e.target.value === "Spouse") {
+    const spouses = [...document.querySelectorAll(
+      "select[name*='relationship']"
+    )].filter(s => s.value === "Spouse");
+
+    if (spouses.length > 1) {
+      alert("Only one spouse is allowed");
+      e.target.value = "";
+    }
+  }
+});
+let autosaveInterval = null;
+
 /* =========================================================
   MAIN
 ========================================================= */
@@ -225,14 +432,171 @@ document.addEventListener("DOMContentLoaded", () => {
   let isSubmitting = false;
   window._debugCurrentStep = () => currentStep;
 
+  setupEducationTable();
   const loggedInMobile = sessionStorage.getItem("loggedInMobile");
   const formStatus = sessionStorage.getItem("formStatus");
   const serverDraft = sessionStorage.getItem("serverDraft");
+  const mobile = sessionStorage.getItem("loggedInMobile");
+
+
+  autosaveInterval = setInterval(() => {
+    const data = collectFormData();
+    localStorage.setItem("formDraft", JSON.stringify(data));
+  }, 2000);
+
+  function clearAutosave() {
+    if (window._autosaveInterval) {
+      clearInterval(window._autosaveInterval);
+      window._autosaveInterval = null;
+    }
+  }
+
+
+  function setupEducationTable() {
+    const addBtn = document.getElementById("addEducationBtn");
+    if (!addBtn) return;
+
+    // First row – always present, no delete
+    addEducationRow(false);
+
+    // Add more rows with delete
+    addBtn.addEventListener("click", () => {
+      addEducationRow(true);
+    });
+  }
+
+  function addEducationRow(showDelete) {
+    const tbody = document.getElementById("educationTableBody");
+    const tr = document.createElement("tr");
+    tr.classList.add("education-row");
+
+    tr.innerHTML = `
+<td>
+  <div class="form-field">
+    <input type="text" name="collegeName">
+    <span class="error"></span>
+  </div>
+</td>
+
+<td>
+  <div class="form-field">
+    <input type="text" name="board">
+    <span class="error"></span>
+  </div>
+</td>
+
+<td>
+  <div class="form-field">
+    <input type="text" name="degree">
+    <span class="error"></span>
+  </div>
+</td>
+
+<td>
+  <div class="form-field">
+    <input type="text" name="stream">
+    <span class="error"></span>
+  </div>
+</td>
+
+<td>
+  <div class="form-field">
+    <input type="text" name="joiningYear" maxlength="4">
+    <span class="error"></span>
+  </div>
+</td>
+
+<td>
+  <div class="form-field">
+    <input type="text" name="leavingYear" maxlength="4">
+    <span class="error"></span>
+  </div>
+</td>
+
+<td>
+  <div class="form-field">
+    <input type="number" name="percentage" min="0" max="100">
+    <span class="error"></span>
+  </div>
+</td>
+
+<td class="action-cell">
+  ${showDelete ? `<button type="button" class="btn-delete">Delete</button>` : ``}
+</td>
+`;
+
+
+    if (showDelete) {
+      tr.querySelector(".btn-delete").addEventListener("click", () => {
+        tr.remove();
+      });
+    }
+
+    tbody.appendChild(tr);
+  }
+
+
+  function stopAutosave() {
+    if (autosaveInterval) {
+      clearInterval(autosaveInterval);
+      autosaveInterval = null;
+    }
+  }
+
+  // store it globally so other functions can clear it
+  window._autosaveInterval = autosaveInterval;
+
+  if (mobile) {
+    const mobile1 = document.getElementById("mobile1");
+    const mobile2 = document.getElementById("mobile2");
+
+    if (mobile1) {
+      mobile1.value = mobile;
+      mobile1.readOnly = true;
+    }
+
+    if (mobile2) {
+      mobile2.value = mobile;
+      mobile2.readOnly = true;
+    }
+  }
 
   if (!loggedInMobile) {
     window.location.href = "./login.html";
     return;
   }
+
+  restoreDraft();
+
+  const mainForm = document.getElementById("candidateForm");
+  if (!mainForm) {
+    console.warn("mainForm not found in DOM");
+    return;
+  }
+
+  mainForm.addEventListener("submit", e => {
+    e.preventDefault();
+    const formData = collectFormData();
+
+    mainForm.addEventListener("submit", e => {
+      e.preventDefault();
+
+      const formData = collectFormData();
+
+      if (isOnline) {
+        submitOnline(formData);
+      } else {
+        saveOfflineSubmission(formData);
+        alert("Form submitted offline. Will sync when back online.");
+        clearAutosave();
+      }
+    });
+
+    if (window._autosaveInterval) {
+      clearInterval(window._autosaveInterval);
+    }
+  });
+
   if (formStatus === "SUBMITTED") {
     document.body.innerHTML = `
     <div class="already-filled">
@@ -652,6 +1016,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const prolongedIllness = document.getElementById("illness");
   const illnessName = document.getElementById("illnessName");
   const illnessDuration = document.getElementById("illnessDuration");
+  const savedEmail =
+    localStorage.getItem("email") || sessionStorage.getItem("email");
+
+  if (savedEmail) {
+    document.getElementById("email").value = savedEmail;
+  }
 
   document.getElementById("permanentAddress")?.addEventListener("input", e => {
     if (e.target.value.length > 25) {
@@ -950,6 +1320,16 @@ document.addEventListener("DOMContentLoaded", () => {
       ok = false;
     }
 
+    const email = step.querySelector("#email");
+
+    if (isBlank(email.value)) {
+      showError(email, "Email is required", silent);
+      ok = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value)) {
+      showError(email, "Enter a valid email address", silent);
+      ok = false;
+    }
+
 
     if (!ok && !silent) {
       if (step.querySelector(".error")) {
@@ -967,7 +1347,6 @@ document.addEventListener("DOMContentLoaded", () => {
   /* =========================================================
     STEP 2 – FAMILY
   ========================================================= */
-
 
   function validateStep2(silent = false) {
     const step = steps[1];
@@ -990,21 +1369,49 @@ document.addEventListener("DOMContentLoaded", () => {
       const name = row.querySelector("input[name*='name']");
       const dob = row.querySelector("input[name*='dob']");
       const dep = row.querySelector("select[name*='dependent']");
+      const occupation = row.querySelector("input[name*='occupation']");
       const income = row.querySelector("input[name*='income']");
 
-      // Required fields
       if (!rel?.value) {
-        showError(rel, "Required", silent);
+        showError(rel, "Relationship required", silent);
         ok = false;
       }
 
       if (!isAlpha(name?.value)) {
-        showError(name, "Invalid name", silent);
+        showError(name, "Valid name required", silent);
         ok = false;
       }
 
       if (!dob?.value || isFutureDate(dob.value)) {
         showError(dob, "Invalid DOB", silent);
+        ok = false;
+      }
+
+      // Occupation required
+      if (!occupation || occupation.value.trim().length === 0) {
+        showError(occupation, "Occupation is required", silent);
+        ok = false;
+      }
+
+      // Income required
+      if (!income || income.value === "") {
+        showError(income, "Income is required", silent);
+        ok = false;
+      }
+
+
+      if (!dep?.value) {
+        showError(dep, "Dependent status required", silent);
+        ok = false;
+      }
+
+      if (dep?.value === "Yes" && Number(income?.value) > 0) {
+        showError(income, "Dependent income must be 0", silent);
+        ok = false;
+      }
+
+      if (income && Number(income.value) < 0) {
+        showError(income, "Income cannot be negative", silent);
         ok = false;
       }
 
@@ -1050,7 +1457,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     });
 
-
     if (!ok && !silent) {
       const hasFieldErrors = step.querySelector(".error");
       if (hasFieldErrors) {
@@ -1059,8 +1465,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    return ok;
-
+    return ok
   }
 
   /* =========================================================
@@ -1080,73 +1485,85 @@ document.addEventListener("DOMContentLoaded", () => {
   function validateStep3(silent = false) {
     const step = steps[2];
     if (!silent) clearStepErrors(step);
+
     let ok = true;
-    const degree = step.querySelector('[placeholder="Degree / Exam"]');
-const stream = step.querySelector('[placeholder="Stream / Branch"]');
-const board  = step.querySelector('[placeholder="Board / University"]');
-const join   = step.querySelector('[placeholder="Joining Year"]');
-const leave  = step.querySelector('[placeholder="Leaving Year"]');
-const percent = step.querySelector('[placeholder="Aggregate Percentage"]');
+    const rows = step.querySelectorAll(".education-row");
 
-/* ---------- Degree ---------- */
-if (degree && isBlank(degree.value)) {
-  showError(degree, "Degree is required", silent);
-  ok = false;
-}
+    if (!rows.length) {
+      showStepError(step, "Add at least one education detail", silent);
+      return false;
+    }
 
-/* ---------- Stream ---------- */
-if (stream && isBlank(stream.value)) {
-  showError(stream, "Stream is required", silent);
-  ok = false;
-}
+    rows.forEach(row => {
+      const college = row.querySelector("input[name='collegeName']");
+      const board = row.querySelector("input[name='board']");
+      const degree = row.querySelector("input[name='degree']");
+      const stream = row.querySelector("input[name='stream']");
+      const join = row.querySelector("input[name='joiningYear']");
+      const leave = row.querySelector("input[name='leavingYear']");
+      const percent = row.querySelector("input[name='percentage']");
 
-/* ---------- Board / University ---------- */
-if (board && isBlank(board.value)) {
-  showError(board, "Board / University is required", silent);
-  ok = false;
-}
+      /* ---------- Alphabet‑only fields ---------- */
+      if (!college.value || !isAlphaOnly(college.value)) {
+        showError(college, "required", silent);
+        ok = false;
+      }
 
-/* ---------- Joining Year ---------- */
-if (join && !inRange(join.value, 1950, new Date().getFullYear())) {
-  showError(join, "Invalid year", silent);
-  ok = false;
-}
+      if (!board.value || !isAlphaOnly(board.value)) {
+        showError(board, "required", silent);
+        ok = false;
+      }
 
-/* ---------- Leaving Year ---------- */
-if (join && leave && +leave.value <= +join.value) {
-  showError(leave, "Leaving must be after joining", silent);
-  ok = false;
-}
+      if (!degree.value || !isAlphaOnly(degree.value)) {
+        showError(degree, "required", silent);
+        ok = false;
+      }
 
-/* ---------- 4‑digit year enforcement ---------- */
-const yearPattern = /^\d{4}$/;
+      if (!stream.value || !isAlphaOnly(stream.value)) {
+        showError(stream, "required", silent);
+        ok = false;
+      }
 
-if (join && !yearPattern.test(join.value)) {
-  showError(join, "Enter a valid 4‑digit year", silent);
-  ok = false;
-}
+      /* ---------- Year validation ---------- */
+      if (!isYear(join.value)) {
+        showError(join, "Enter valid 4‑digit joining year", silent);
+        ok = false;
+      }
 
-if (leave && !yearPattern.test(leave.value)) {
-  showError(leave, "Enter a valid 4‑digit year", silent);
-  ok = false;
-}
+      if (!isYear(leave.value)) {
+        showError(leave, "Enter valid 4‑digit leaving year", silent);
+        ok = false;
+      }
 
-/* ---------- Aggregate Percentage ---------- */
-if (percent && isBlank(percent.value)) {
-  showError(percent, "Aggregate percentage is required", silent);
-  ok = false;
-} else if (percent && (+percent.value < 0 || +percent.value > 100)) {
-  showError(percent, "Percentage must be between 0 and 100", silent);
-  ok = false;
-}
+      if (isYear(join.value) && isYear(leave.value) && +leave.value <= +join.value) {
+        showError(leave, "Leaving year must be after joining year", silent);
+        ok = false;
+      }
 
-/* ---------- Textarea length ---------- */
-step.querySelectorAll("textarea").forEach(t => {
-  if (t.value.length > 500) {
-    showError(t, "Max 500 characters", silent);
-    ok = false;
-  }
-});
+      /* ---------- Percentage ---------- */
+      if (!percent.value || percent.value < 0 || percent.value > 100) {
+        showError(percent, "must be between 0 and 100", silent);
+        ok = false;
+      }
+    });
+
+    const member = step.querySelector(
+      'select[name="memberOfProfessionalBody"]'
+    );
+
+    const honors = step.querySelector(
+      'select[name="specialHonors"]'
+    );
+
+    if (member && member.value === "Select") {
+      showError(member, "Please select an option", silent);
+      ok = false;
+    }
+
+    if (honors && honors.value === "Select") {
+      showError(honors, "Please select an option", silent);
+      ok = false;
+    }
 
 
     // ===== Conditional Skill Textareas (Yes → Details Required) =====
@@ -1169,6 +1586,8 @@ step.querySelectorAll("textarea").forEach(t => {
     const hobbies = document.getElementById("activityHobbies");
     const extraError = document.getElementById("extraCurricularError");
 
+
+
     if (
       !literary?.value.trim() &&
       !sports?.value.trim() &&
@@ -1176,22 +1595,45 @@ step.querySelectorAll("textarea").forEach(t => {
     ) {
       if (extraError) extraError.style.display = "block";
 
-      [literary, sports, hobbies].forEach(el => {
-        if (el) el.classList.add("error");
-      });
+      // ✅ mark ONE real field as error so focus works
+      showError(literary || sports || hobbies,
+        "Enter at least one activity", silent);
 
       ok = false;
     } else {
       if (extraError) extraError.style.display = "none";
-
-      [literary, sports, hobbies].forEach(el => {
-        if (el) el.classList.remove("error");
-      });
     }
 
+    function validateStep3Languages() {
+      const checked = document.querySelectorAll(
+        '#languageSection input[type="checkbox"]:checked'
+      );
 
-    if (!validateStep3Languages()) {
-      ok = false;
+      const manualInputs = document.querySelectorAll(
+        '#extraLanguages .language-input'
+      );
+
+      const error = document.getElementById("languageError");
+
+      let hasManualValue = false;
+      manualInputs.forEach(input => {
+        if (input.value.trim() !== "") hasManualValue = true;
+      });
+
+      if (checked.length === 0 && !hasManualValue) {
+        if (error) error.style.display = "block";
+
+        // ✅ force highlight
+        const first = document.querySelector(
+          '#languageSection input[type="checkbox"], #extraLanguages .language-input'
+        );
+        if (first) first.classList.add("error");
+
+        return false;
+      }
+
+      if (error) error.style.display = "none";
+      return true;
     }
 
     const motherTongueSelected = document.querySelector(
@@ -1199,23 +1641,26 @@ step.querySelectorAll("textarea").forEach(t => {
     );
 
     if (!motherTongueSelected) {
-      showStepError(step, "Please select a mother tongue language");
+      const firstRadio = document.querySelector(
+        "#languageTable input[name='motherTongue']"
+      );
+
+      showError(firstRadio, "Select mother tongue", silent);
       ok = false;
     }
 
- const strengths = step.querySelector('textarea[placeholder="Strengths"]');
-const weaknesses = step.querySelector('textarea[placeholder="Weaknesses"]');
+    const strengths = step.querySelector('textarea[placeholder="Strengths"]');
+    const weaknesses = step.querySelector('textarea[placeholder="Weaknesses"]');
 
-if (!strengths || isBlank(strengths.value)) {
-  showError(strengths, "Strengths are required", silent);
-  ok = false;
-}
+    if (strengths && isBlank(strengths.value)) {
+      showError(strengths, "Strengths are required", silent);
+      ok = false;
+    }
 
-if (!weaknesses || isBlank(weaknesses.value)) {
-  showError(weaknesses, "Weaknesses are required", silent);
-  ok = false;
-}
-
+    if (weaknesses && isBlank(weaknesses.value)) {
+      showError(weaknesses, "Weaknesses are required", silent);
+      ok = false;
+    }
 
     // Get all selects in Step-3
     step.querySelectorAll("select + textarea").forEach(textarea => {
@@ -1232,9 +1677,18 @@ if (!weaknesses || isBlank(weaknesses.value)) {
     });
 
     if (!ok && !silent) {
-      showSummaryError(step, "Please correct the highlighted errors before continuing");
-      focusFirstError(step);
+      if (step.querySelector(".error")) {
+        showSummaryError(
+          step,
+          "Please correct the highlighted errors before continuing"
+        );
+        focusFirstError(step);
+      } else {
+        console.warn("Step‑3 invalid but no field marked error");
+        shakeCurrentStep();
+      }
     }
+
     return ok;
   }
 
@@ -1710,13 +2164,12 @@ if (!weaknesses || isBlank(weaknesses.value)) {
 
 
   ///////////////---------collectFormData-------////////////,.......................................
-  function collectFormData() {
-    const form = document.getElementById("candidateForm");
-    const data = {};
+  function collectFormDataForSubmit() {
+    const form = document.getElementById("candidateForm"); const data = {};
 
     form.querySelectorAll("input, select, textarea").forEach(el => {
-      const key = el.name || el.id;
-      if (!key) return;
+      if (!el.name) return;
+      const key = el.name;
 
       // ✅ Skip masked inputs
       if (key === "pan" || key === "aadhaar") return;
@@ -1834,6 +2287,7 @@ if (!weaknesses || isBlank(weaknesses.value)) {
     updateMediclaimVisibility();
     syncAllFamilyRows();
     updateFamilyRelationshipOptions();
+
     updateUI();
 
     requestAnimationFrame(() => {
@@ -1845,11 +2299,8 @@ if (!weaknesses || isBlank(weaknesses.value)) {
   })();
 
   /* ================= ONLINE SYNC ================= */
-  window.addEventListener("online", () => {
-    console.log("Back online – sync triggered");
-  });
-
   window.addEventListener("online", async () => {
+    console.log("Back online – sync triggered");
     const pending = await loadOfflineSubmissions(); // your IndexedDB helper
     if (!pending?.length) return;
 
