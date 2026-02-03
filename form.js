@@ -20,6 +20,10 @@ window.addEventListener("offline", () => {
   alert("You are Offline. You can continue filling the form");
 });
 
+window.addEventListener("load", () => {
+  loadDraft(); // your restore function
+});
+
 function isVisible(el) {
   return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
 }
@@ -61,7 +65,78 @@ function restoreDraft() {
       el.value = data[el.name];
     }
   });
+}
 
+function restoreFormData(data) {
+  if (!data) return;
+
+  document.querySelectorAll("input, select, textarea").forEach(el => {
+    if (!el.name || !(el.name in data)) return;
+
+    // PAN & Aadhaar handled separately
+    if (el.name === "pan" || el.name === "aadhaar") return;
+
+    if (el.type === "radio") {
+      el.checked = el.value === data[el.name];
+    } else if (el.type === "checkbox") {
+      el.checked = !!data[el.name];
+    } else {
+      el.value = data[el.name];
+    }
+  });
+
+  // 🔁 Recalculate derived / conditional fields
+  recalculateAge();
+  toggleIllnessFields();
+  toggleMaritalFields();
+  toggleExperienceDependentSections();
+}
+
+function restoreMaskedKYC(data) {
+  if (data.pan && panPattern.test(data.pan)) {
+    realPan = data.pan;
+    panInput.value = data.pan.slice(0, 2) + "****" + data.pan.slice(6);
+  }
+
+  if (data.aadhaar && /^\d{12}$/.test(data.aadhaar)) {
+    realAadhaar = data.aadhaar;
+    aadhaarInput.value = "XXXXXXXX" + data.aadhaar.slice(8);
+  }
+}
+
+function loadDraft() {
+  const saved = localStorage.getItem("formDraft");
+  if (!saved) return;
+
+  const data = JSON.parse(saved);
+
+  isRestoring = true;
+  restoreFormData(data);
+  restoreMaskedKYC(data);
+  recalculateAge();            // ✅ age fix
+  toggleIllnessFields();       // ✅ illness fix
+  toggleMaritalFields();       // ✅ marital fix
+  toggleExperienceDependentSections();
+  isRestoring = false;
+}
+
+
+function recalculateAge() {
+  const dob = document.getElementById("dob")?.value;
+  const ageEl = document.getElementById("age");
+
+  if (!dob || !ageEl) return;
+
+  const birth = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+
+  ageEl.value = age;
 }
 
 function isAlphaOnly(value) {
@@ -157,6 +232,8 @@ let realPan = "";
 let realAadhaar = "";
 let isRestoringDraft = false;
 
+let isRestoring = false;
+
 window.addFamilyRow = () => {
   const tbody = document.getElementById("familyTableBody");
 
@@ -198,7 +275,6 @@ window.addFamilyRow = () => {
     updateFamilyRelationshipOptions(); // ✅ ADD THIS
   });
 };
-
 
 function syncFamilyRow(row) {
   const rel = row.querySelector("select[name*='relationship']");
@@ -293,7 +369,6 @@ function setupMediclaimRequiredLogic() {
   }
 }
 
-
 function fillMediclaimEmployeeDetails() {
   const map = {
     "firstName lastName": () =>
@@ -308,18 +383,17 @@ function fillMediclaimEmployeeDetails() {
   });
 }
 // run when entering step‑6
-// function showStep(index) {
-//   steps.forEach((step, i) => step.classList.toggle("active", i === index));
-//   stepperSteps.forEach((circle, i) =>
-//     circle.classList.toggle("active", i <= index)
-//   );
-//   prevBtn.style.display = index === 0 ? "none" : "inline-block";
-//   nextBtn.style.display = index === TOTAL_STEPS - 1 ? "none" : "inline-block";
-//   submitBtn.style.display = index === TOTAL_STEPS - 1 ? "inline-block" : "none";
-//   if (index === 5) fillMediclaimEmployeeDetails();
-//   fillMediclaimFamilyDetails();
-// }
+function showStep(index) {
+  steps.forEach((step, i) => step.classList.toggle("active", i === index));
+  stepperSteps.forEach((circle, i) =>
+    circle.classList.toggle("active", i <= index)
+  );
 
+  if (index === 5) { // Step‑6
+    fillMediclaimEmployeeDetails();
+    fillMediclaimFamilyDetails(); // ✅ ADD THIS
+  }
+}
 
 function initFamilyRow(row) {
   const rel = row.querySelector("select[name*='relationship']");
@@ -372,18 +446,13 @@ function fillMediclaimFamilyDetails() {
         gender = "Female";
         break;
 
-      case "Spouse":
-        // Use candidate gender to infer spouse gender
+      case "Spouse": {
         const candidateGender =
-          document.querySelector("input[name='gender']:checked")?.value;
-
+          document.querySelector("input[name='gender']:checked")?.value || "";
         if (candidateGender === "Male") gender = "Female";
         else if (candidateGender === "Female") gender = "Male";
-        else gender = "";
         break;
-
-      default:
-        gender = "";
+      }
     }
 
     const tr = document.createElement("tr");
@@ -394,10 +463,10 @@ function fillMediclaimFamilyDetails() {
       <td>${name}</td>
       <td>${dob}</td>
     `;
-
     tbody.appendChild(tr);
   });
 }
+
 
 document.addEventListener("change", e => {
   if (!e.target.matches("select[name*='relationship']")) return;
@@ -463,8 +532,9 @@ document.addEventListener("DOMContentLoaded", () => {
   })();
   let currentStep = 0;
   let isSubmitting = false;
-  window._debugCurrentStep = () => currentStep;
 
+  window._debugCurrentStep = () => currentStep;
+ restoreEducationRows();
   setupEducationTable();
   const loggedInMobile = sessionStorage.getItem("loggedInMobile");
   const formStatus = sessionStorage.getItem("formStatus");
@@ -485,52 +555,95 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
 
-  function setupEducationTable() {
-    const addBtn = document.getElementById("addEducationBtn");
-    if (!addBtn) return;
+function addEducationRow(data = null, showDelete = true) {
+  const tbody = document.getElementById("educationTableBody");
+  const tr = document.createElement("tr");
+  tr.classList.add("education-row");
 
-    // First row – always present, no delete
-    addEducationRow(false);
-
-    // Add more rows with delete
-    addBtn.addEventListener("click", () => {
-      addEducationRow(true);
-    });
-  }
-
-  function addEducationRow(showDelete) {
-    const tbody = document.getElementById("educationTableBody");
-    const tr = document.createElement("tr");
-    tr.classList.add("education-row");
-
-    tr.innerHTML = `
-    <td><div class="form-field"><input type="text" name="collegeName"><span class="error"></span></div></td>
-    <td><div class="form-field"><input type="text" name="board"><span class="error"></span></div></td>
-    <td><div class="form-field"><input type="text" name="degree"><span class="error"></span></div></td>
-    <td><div class="form-field"><input type="text" name="stream"><span class="error"></span></div></td>
-    <td><div class="form-field"><input type="text" name="joiningYear" maxlength="4"><span class="error" min="2000" max="2099" placeholder="20--"></span></div></td>
-    <td><div class="form-field"><input type="text" name="leavingYear" maxlength="4"><span class="error" min="2000" max="2099" placeholder="20--"></span></div></td>
-    <td><div class="form-field"><input type="number" name="percentage" min="0" max="100"><span class="error"></span></div></td>
-${showDelete ? `
-<td>
-  <button type="button" class="btn-delete">Delete</button>
-</td>` : ``}
+  tr.innerHTML = `
+    <td><input type="text" name="collegeName" value="${data?.college || ""}"></td>
+    <td><input type="text" name="board" value="${data?.board || ""}"></td>
+    <td><input type="text" name="degree" value="${data?.degree || ""}"></td>
+    <td><input type="text" name="stream" value="${data?.stream || ""}"></td>
+    <td><input type="text" name="joiningYear" value="${data?.joinYear || ""}"></td>
+    <td><input type="text" name="leavingYear" value="${data?.leaveYear || ""}"></td>
+    <td><input type="number" name="percentage" value="${data?.aggregate || ""}"></td>
+    ${showDelete ? `<td><button type="button" class="btn-delete">Delete</button></td>` : ""}
   `;
 
-    // ✅ Attach restrictions AFTER inputs exist
-    allowOnlyAlphabets(tr.querySelector("input[name='collegeName']"));
-    allowOnlyAlphabets(tr.querySelector("input[name='board']"));
-    allowOnlyAlphabets(tr.querySelector("input[name='degree']"));
-    allowOnlyAlphabets(tr.querySelector("input[name='stream']"));
-    allowOnlyYear(tr.querySelector("input[name='joiningYear']"));
-    allowOnlyYear(tr.querySelector("input[name='leavingYear']"));
+  // Input restrictions
+  allowOnlyAlphabets(tr.querySelector("[name='collegeName']"));
+  allowOnlyAlphabets(tr.querySelector("[name='board']"));
+  allowOnlyAlphabets(tr.querySelector("[name='degree']"));
+  allowOnlyAlphabets(tr.querySelector("[name='stream']"));
+  allowOnlyYear(tr.querySelector("[name='joiningYear']"));
+  allowOnlyYear(tr.querySelector("[name='leavingYear']"));
 
-    if (showDelete) {
-      tr.querySelector(".btn-delete").onclick = () => tr.remove();
-    }
-
-    tbody.appendChild(tr);
+  if (showDelete) {
+    tr.querySelector(".btn-delete").onclick = () => {
+      tr.remove();
+      saveEducationRows();
+    };
   }
+
+  tbody.appendChild(tr);
+}
+
+
+function saveEducationRows() {
+  const rows = [];
+  document.querySelectorAll("#educationTableBody tr").forEach(tr => {
+    const inputs = tr.querySelectorAll("input");
+    rows.push({
+      college: inputs[0].value,
+      board: inputs[1].value,
+      degree: inputs[2].value,
+      stream: inputs[3].value,
+      joinYear: inputs[4].value,
+      leaveYear: inputs[5].value,
+      aggregate: inputs[6].value
+    });
+  });
+  localStorage.setItem("educationRows", JSON.stringify(rows));
+}
+
+
+function restoreEducationRows() {
+  const saved = JSON.parse(localStorage.getItem("educationRows") || "[]");
+  const tbody = document.getElementById("educationTableBody");
+  tbody.innerHTML = "";
+
+  if (saved.length === 0) {
+    addEducationRow(null, false); // default row
+    return;
+  }
+
+  saved.forEach((row, index) => {
+    addEducationRow(row, index !== 0);
+  });
+}
+
+  function setupEducationTable() {
+  const addBtn = document.getElementById("addEducationBtn");
+  if (!addBtn) return;
+
+  addBtn.addEventListener("click", () => {
+    addEducationRow(null, true);
+    saveEducationRows();
+  });
+}
+
+
+function removeRow(btn) {
+  btn.closest("tr").remove();
+  saveEducationRows();
+}
+
+  document.addEventListener("input", e => {
+  if (e.target.closest("#educationTableBody")) {
+    saveEducationRows();
+  }
+});
 
 
   function stopAutosave() {
@@ -1326,8 +1439,6 @@ ${showDelete ? `
     });
 
     // ----- PAN -----
-
-
     const email = step.querySelector("#email");
 
     if (isBlank(email.value)) {
@@ -1338,6 +1449,7 @@ ${showDelete ? `
       ok = false;
     }
 
+    if (isRestoring) return true;
 
     if (!ok && !silent) {
       if (step.querySelector(".error")) {
@@ -1724,76 +1836,62 @@ ${showDelete ? `
     STEP 4 – EXPERIENCE
   ========================================================= */
   function validateStep4(silent = false) {
-    const step = steps[3];
-    if (!silent) clearStepErrors(step);
+  const step = steps[3];
+  if (!silent) clearStepErrors(step);
 
-    let ok = true;
+  let ok = true;
 
-    const yearsEl = step.querySelector("#expYears");
-    const monthsEl = step.querySelector("#expMonths");
+  const yearsEl = step.querySelector("#expYears");
+  const monthsEl = step.querySelector("#expMonths");
 
-    const years = Number(yearsEl?.value);
-    const months = Number(monthsEl?.value);
+  const years = Number(yearsEl.value);
+  const months = Number(monthsEl.value);
 
-    const hasExperience =
-      !isNaN(years) &&
-      !isNaN(months) &&
-      (years > 0 || months > 0);
+  /* ================= TOTAL EXPERIENCE (REQUIRED) ================= */
 
-    // ✅ Fresher → skip entire step
-    if (!hasExperience) return true;
-
-    /* ================= TOTAL EXPERIENCE (REQUIRED) ================= */
-
-    if (yearsEl.value === "" || years < 0) {
-      showError(yearsEl, "Enter valid experience years", silent);
-      ok = false;
-    }
-
-    if (monthsEl.value === "" || months < 0 || months > 11) {
-      showError(monthsEl, "Enter months between 0 and 11", silent);
-      ok = false;
-    }
-
-    if (years === 0 && months === 0) {
-      showError(yearsEl, "Total experience cannot be 0", silent);
-      showError(monthsEl, "Total experience cannot be 0", silent);
-      ok = false;
-    }
-
-    /* ================= EMPLOYMENT HISTORY (REQUIRED) ================= */
-    step.querySelectorAll("#employmentHistory input, #employmentHistory textarea")
-      .forEach(el => {
-        if (isSkippable(el)) return; // ✅ SINGLE LINE FIX
-
-        if (!el.value.trim()) {
-          showError(el, "This field is required", silent);
-          ok = false;
-        }
-      });
-
-    /* ================= ASSIGNMENTS HANDLED (REQUIRED) ================= */
-    step
-      .querySelectorAll("#assignmentsHandled input, #assignmentsHandled textarea")
-      .forEach(el => {
-        if (isSkippable(el)) return;
-
-        if (!el.value.trim()) {
-          showError(el, "This field is required", silent);
-          ok = false;
-        }
-      });
-
-    if (!ok && !silent) {
-      showSummaryError(
-        step,
-        "Please complete Total Experience, Employment History, and Assignments"
-      );
-      focusFirstError(step);
-    }
-
-    return ok;
+  if (yearsEl.value.trim() === "" || years < 0) {
+    showError(yearsEl, "Experience years is required", silent);
+    ok = false;
   }
+
+  if (monthsEl.value.trim() === "" || months < 0 || months > 11) {
+    showError(monthsEl, "Experience months is required (0–11)", silent);
+    ok = false;
+  }
+
+  /* ================= EMPLOYMENT HISTORY (REQUIRED) ================= */
+  step
+    .querySelectorAll("#employmentHistory input, #employmentHistory textarea")
+    .forEach(el => {
+      if (isSkippable(el)) return;
+
+      if (!el.value.trim()) {
+        showError(el, "This field is required", silent);
+        ok = false;
+      }
+    });
+
+  /* ================= ASSIGNMENTS HANDLED (REQUIRED) ================= */
+  step
+    .querySelectorAll("#assignmentsHandled input, #assignmentsHandled textarea")
+    .forEach(el => {
+      if (isSkippable(el)) return;
+
+      if (!el.value.trim()) {
+        showError(el, "This field is required", silent);
+        ok = false;
+      }
+    });
+
+  if (!ok && !silent) {
+    showSummaryError(
+      step,
+      "Please complete Total Experience, Employment History, and Assignments"
+    );
+    focusFirstError(step);
+  }
+  return ok;
+}
 
   /* =========================================================
   STEP 5
