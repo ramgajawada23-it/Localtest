@@ -69,7 +69,7 @@
           <div class="grid-3">
             <div class="form-field">
               <label>Date of Birth</label>
-              <input type="date" id="dob">
+              <input type="date" id="dob" name="dob">
             </div>
             <div class="form-field">
               <label>Place of Birth</label>
@@ -121,10 +121,10 @@
 
           <div class="grid-2">
             <div class="form-field">
-              <input placeholder="Father's Name" id="fatherName">
+              <input placeholder="Father's Name" id="fatherName" name="fatherName">
             </div>
             <div class="form-field">
-              <input placeholder="Mother's Name" id="motherName">
+              <input placeholder="Mother's Name" id="motherName" name="motherName">
             </div>
           </div>
 
@@ -138,11 +138,11 @@
               </select>
             </div>
             <div class="form-field">
-              <input type="date" id="marriageDate">
+              <input type="date" id="marriageDate" name="marriageDate">
             </div>
 
             <div class="form-field">
-              <input type="number" id="childrenCount" placeholder="No. of Children">
+              <input type="number" id="childrenCount" placeholder="No. of Children" name="childrenCount">
             </div>
           </div>
 
@@ -165,10 +165,10 @@
           <h4>Physical Details</h4>
           <div class="grid-3">
             <div class="form-field">
-              <input placeholder="Height (Feet'inches)" id="heightFeet">
+              <input placeholder="Height (Feet'inches)" id="heightFeet" name="heightFeet">
             </div>
             <div class="form-field">
-              <input placeholder="Weight (kg)" id="weight">
+              <input placeholder="Weight (kg)" id="weight" name="weight">
             </div>
           </div>
 
@@ -227,11 +227,11 @@
 
           <div class="grid-3">
             <div class="form-field">
-              <input type="text" id="pan" placeholder="PAN Number">
+              <input type="text" id="pan" placeholder="PAN Number" name="pan">
             </div>
 
             <div class="form-field">
-              <input type="text" id="aadhaar" placeholder="Aadhaar Number">
+              <input type="text" id="aadhaar" placeholder="Aadhaar Number" name="aadhaar">
             </div>
 
             <div class="form-field">
@@ -239,10 +239,9 @@
             </div>
           </div>
 
-
           <div class="grid-2">
             <div class="form-field">
-              <input type="text" placeholder="Bank Name" id="bankName">
+              <input type="text" placeholder="Bank Name" id="bankName" name="bankName">
             </div>
             <div class="form-field">
               <input type="text" id="bankAccount" placeholder="Account Number">
@@ -251,10 +250,10 @@
 
           <div class="grid-2">
             <div class="form-field">
-              <input placeholder="IFSC Code" id="ifsc">
+              <input placeholder="IFSC Code" id="ifsc" name="ifsc">
             </div>
             <div class="form-field">
-              <input placeholder="Branch Name" id="branch">
+              <input placeholder="Branch Name" id="branch" name="branch">
             </div>
           </div>
           <div class="form-field">
@@ -291,7 +290,7 @@
 
                 <td>
                   <div class="form-field">
-                    <select name="family[${index}][relationship]">
+                    <select name="family[0][relationship]">
                       <option value="">Select</option>
                       <option value="Father">Father</option>
                       <option value="Mother">Mother</option>
@@ -386,7 +385,7 @@
 
           <!-- Professional Body -->
           <div class="form-field">
-            <label>Member of Professional Body / Society?</label>
+            <label>Are you a member of any professional Body/ Society ?</label>
             <select name="memberOfProfessionalBody">
               <option value="">Select</option>
               <option>Yes</option>
@@ -398,7 +397,7 @@
 
           <!-- Honors -->
           <div class="form-field">
-            <label>Special Honors / Scholarships?</label>
+            <label>Have you received any special Honors/ Scholarship?</label>
             <select name="specialHonors">
               <option value="">Select</option>
               <option>Yes</option>
@@ -410,7 +409,7 @@
 
           <!-- Publications -->
           <div class="form-field">
-            <label>Papers Presented / Publications</label>
+            <label>Details of papers Presented / Publications made.</label>
             <textarea placeholder="Topics, dates, details"></textarea>
           </div>
 
@@ -527,7 +526,7 @@
 
             <div class="grid-2">
               <div class="form-field">
-                <input type="text" placeholder="Company Name">
+                <input type="text" placeholder="Company Name" name="companyName">
               </div>
               <div class="form-field">
                 <input type="text" placeholder="Company Location / Head Office">
@@ -664,7 +663,6 @@
 
             <br>
 
-
             <div class="grid-3">
               <div class="form-field"><input type="number" id="totalA" placeholder="Total (a)"></div>
               <div class="form-field"><input type="number" id="totalB" placeholder="Total (b)"></div>
@@ -694,9 +692,9 @@
           <div class="form-field">
             <label>Have you availed any loan facility?</label>
             <select id="loanAvailed">
-              <option value="">Select</option>
-              <option>Yes</option>
-              <option>No</option>
+              <option value="">-- Select --</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
             </select>
           </div>
 
@@ -818,7 +816,8 @@
               <h1 class="doc-title">CIRCULAR</h1>
 
               <div class="org">
-                <div class="org-sub">NATCO PHARMA LT</div>
+                <div class="org-sub">NATCO PHARMA LIMITED</div>
+                <br>
                 <div class="org-name">To</div>
                 <div class="org-sub">Field Force (Additions)</div>
               </div>
@@ -964,12 +963,12 @@
   <script src="offline-db.js"></script>
   <script src="form.js"></script>
 
-  <!-- <script>
+  <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("./service-worker.js");
 
     }
-  </script> -->
+  </script>
 </body>
 
 </html>

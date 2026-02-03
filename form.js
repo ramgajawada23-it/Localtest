@@ -20,14 +20,10 @@ window.addEventListener("offline", () => {
   alert("You are Offline. You can continue filling the form");
 });
 
-window.addEventListener("online", () => {
-  alert("Back online");
-  syncOfflineSubmissions();
-});
+function isVisible(el) {
+  return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+}
 
-window.addEventListener("offline", () => {
-  alert("You are Offline. You can continue filling the form");
-});
 
 function collectFormData() {
   const data = {};
@@ -54,6 +50,9 @@ function restoreDraft() {
   document.querySelectorAll("input, select, textarea").forEach(el => {
     if (!el.name || !(el.name in data)) return;
 
+    // ✅ IMPORTANT: skip KYC here
+    if (el.name === "pan" || el.name === "aadhaar") return;
+
     if (el.type === "radio") {
       el.checked = el.value === data[el.name];
     } else if (el.type === "checkbox") {
@@ -62,6 +61,7 @@ function restoreDraft() {
       el.value = data[el.name];
     }
   });
+
 }
 
 function isAlphaOnly(value) {
@@ -69,9 +69,9 @@ function isAlphaOnly(value) {
 }
 
 function isYear(value) {
-  return /^\d{4}$/.test(value);
+  const y = Number(value);
+  return /^\d{4}$/.test(value) && y >= 1900 && y <= 2099;
 }
-
 
 function submitOnline(data) {
   fetch("http://localhost:8080/candidates", {
@@ -413,6 +413,39 @@ document.addEventListener("change", e => {
     }
   }
 });
+
+function allowOnlyYear(input) {
+  input.addEventListener("input", e => {
+    let v = e.target.value.replace(/\D/g, "").slice(0, 4);
+
+    if (v.length === 4) {
+      const year = Number(v);
+      if (year < 1900) v = "1900";
+      if (year > 2099) v = "2099";
+    }
+
+    e.target.value = v;
+  });
+}
+
+
+function allowOnlyAlphabets(input) {
+  input.addEventListener("input", e => {
+    e.target.value = e.target.value.replace(/[^A-Za-z .]/g, "");
+  });
+}
+
+function isSkippable(el) {
+  return (
+    !el ||                          // ✅ safety
+    el.disabled ||
+    el.readOnly ||
+    el.offsetParent === null ||
+    el.id === "pan" ||
+    el.id === "aadhaar"
+  );
+}
+
 let autosaveInterval = null;
 
 /* =========================================================
@@ -471,65 +504,29 @@ document.addEventListener("DOMContentLoaded", () => {
     tr.classList.add("education-row");
 
     tr.innerHTML = `
+    <td><div class="form-field"><input type="text" name="collegeName"><span class="error"></span></div></td>
+    <td><div class="form-field"><input type="text" name="board"><span class="error"></span></div></td>
+    <td><div class="form-field"><input type="text" name="degree"><span class="error"></span></div></td>
+    <td><div class="form-field"><input type="text" name="stream"><span class="error"></span></div></td>
+    <td><div class="form-field"><input type="text" name="joiningYear" maxlength="4"><span class="error" min="2000" max="2099" placeholder="20--"></span></div></td>
+    <td><div class="form-field"><input type="text" name="leavingYear" maxlength="4"><span class="error" min="2000" max="2099" placeholder="20--"></span></div></td>
+    <td><div class="form-field"><input type="number" name="percentage" min="0" max="100"><span class="error"></span></div></td>
+${showDelete ? `
 <td>
-  <div class="form-field">
-    <input type="text" name="collegeName">
-    <span class="error"></span>
-  </div>
-</td>
+  <button type="button" class="btn-delete">Delete</button>
+</td>` : ``}
+  `;
 
-<td>
-  <div class="form-field">
-    <input type="text" name="board">
-    <span class="error"></span>
-  </div>
-</td>
-
-<td>
-  <div class="form-field">
-    <input type="text" name="degree">
-    <span class="error"></span>
-  </div>
-</td>
-
-<td>
-  <div class="form-field">
-    <input type="text" name="stream">
-    <span class="error"></span>
-  </div>
-</td>
-
-<td>
-  <div class="form-field">
-    <input type="text" name="joiningYear" maxlength="4">
-    <span class="error"></span>
-  </div>
-</td>
-
-<td>
-  <div class="form-field">
-    <input type="text" name="leavingYear" maxlength="4">
-    <span class="error"></span>
-  </div>
-</td>
-
-<td>
-  <div class="form-field">
-    <input type="number" name="percentage" min="0" max="100">
-    <span class="error"></span>
-  </div>
-</td>
-
-<td class="action-cell">
-  ${showDelete ? `<button type="button" class="btn-delete">Delete</button>` : ``}
-</td>
-`;
-
+    // ✅ Attach restrictions AFTER inputs exist
+    allowOnlyAlphabets(tr.querySelector("input[name='collegeName']"));
+    allowOnlyAlphabets(tr.querySelector("input[name='board']"));
+    allowOnlyAlphabets(tr.querySelector("input[name='degree']"));
+    allowOnlyAlphabets(tr.querySelector("input[name='stream']"));
+    allowOnlyYear(tr.querySelector("input[name='joiningYear']"));
+    allowOnlyYear(tr.querySelector("input[name='leavingYear']"));
 
     if (showDelete) {
-      tr.querySelector(".btn-delete").addEventListener("click", () => {
-        tr.remove();
-      });
+      tr.querySelector(".btn-delete").onclick = () => tr.remove();
     }
 
     tbody.appendChild(tr);
@@ -573,29 +570,6 @@ document.addEventListener("DOMContentLoaded", () => {
     console.warn("mainForm not found in DOM");
     return;
   }
-
-  mainForm.addEventListener("submit", e => {
-    e.preventDefault();
-    const formData = collectFormData();
-
-    mainForm.addEventListener("submit", e => {
-      e.preventDefault();
-
-      const formData = collectFormData();
-
-      if (isOnline) {
-        submitOnline(formData);
-      } else {
-        saveOfflineSubmission(formData);
-        alert("Form submitted offline. Will sync when back online.");
-        clearAutosave();
-      }
-    });
-
-    if (window._autosaveInterval) {
-      clearInterval(window._autosaveInterval);
-    }
-  });
 
   if (formStatus === "SUBMITTED") {
     document.body.innerHTML = `
@@ -949,60 +923,48 @@ document.addEventListener("DOMContentLoaded", () => {
   const panInput = document.getElementById("pan");
   const aadhaarInput = document.getElementById("aadhaar");
 
-  panInput?.addEventListener("input", e => {
+  // ===== PAN =====
+  // ===== PAN =====
+  panInput.addEventListener("input", e => {
     if (isRestoringDraft) return;
 
     let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (v.length > 10) v = v.slice(0, 10);
-    e.target.value = v;
 
     if (panPattern.test(v)) {
       realPan = v;
       e.target.value = v.slice(0, 2) + "****" + v.slice(6);
+      clearError(panInput);
+    } else {
+      e.target.value = v;
     }
   });
 
-  panInput?.addEventListener("focus", () => {
-    if (isRestoringDraft) return;
+  panInput.addEventListener("focus", () => {
     if (realPan) panInput.value = realPan;
   });
 
-  panInput?.addEventListener("blur", () => {
-    if (isRestoringDraft) return;
-    if (panPattern.test(panInput.value)) {
-      realPan = panInput.value;
-      panInput.value =
-        panInput.value.slice(0, 2) + "****" + panInput.value.slice(6);
-    }
-  });
 
-  aadhaarInput?.addEventListener("input", e => {
-    if (isRestoringDraft) return; // ✅ ADD THIS
+  // ===== AADHAAR =====
+  aadhaarInput.addEventListener("input", e => {
+    if (isRestoringDraft) return;
 
     let v = e.target.value.replace(/\D/g, "");
     if (v.length > 12) v = v.slice(0, 12);
-    e.target.value = v;
 
     if (aadhaarPlain.test(v)) {
       realAadhaar = v;
       e.target.value = "XXXXXXXX" + v.slice(8);
+      clearError(aadhaarInput);
+    } else {
+      e.target.value = v;
     }
   });
 
-  aadhaarInput?.addEventListener("blur", () => {
-    if (isRestoringDraft) return;
-
-    if (aadhaarPlain.test(aadhaarInput.value)) {
-      realAadhaar = aadhaarInput.value;
-      aadhaarInput.value = "XXXXXXXX" + aadhaarInput.value.slice(8);
-    }
-  });
-
-
-  aadhaarInput?.addEventListener("focus", () => {
-    if (isRestoringDraft) return;
+  aadhaarInput.addEventListener("focus", () => {
     if (realAadhaar) aadhaarInput.value = realAadhaar;
   });
+
 
 
   /* =========================================================
@@ -1086,6 +1048,55 @@ document.addEventListener("DOMContentLoaded", () => {
   prolongedIllness?.addEventListener("change", toggleIllnessFields);
   toggleIllnessFields();
 
+  function syncMaskedKYC() {
+    if (
+      !realPan &&
+      panInput.value &&
+      panPattern.test(panInput.value)
+    ) {
+      realPan = panInput.value;
+    }
+
+    if (
+      !realAadhaar &&
+      aadhaarInput.value &&
+      /^\d{12}$/.test(aadhaarInput.value)
+    ) {
+      realAadhaar = aadhaarInput.value;
+    }
+  }
+
+
+
+
+  function validateKYC(silent = false) {
+    syncMaskedKYC();
+    let ok = true;
+
+    clearError(panInput);
+    clearError(aadhaarInput);
+
+    // ✅ PAN
+    if (!realPan) {
+      showError(panInput, "PAN is required", silent);
+      ok = false;
+    } else if (!panPattern.test(realPan)) {
+      showError(panInput, "Invalid PAN format", silent);
+      ok = false;
+    }
+
+    // ✅ Aadhaar
+    if (!realAadhaar) {
+      showError(aadhaarInput, "Aadhaar is required", silent);
+      ok = false;
+    } else if (!aadhaarPlain.test(realAadhaar)) {
+      showError(aadhaarInput, "Aadhaar must be 12 digits", silent);
+      ok = false;
+    }
+
+    return ok;
+  }
+
 
   function validateStep1(silent = false) {
     const step = steps[0];
@@ -1165,6 +1176,8 @@ document.addEventListener("DOMContentLoaded", () => {
       showError(prolongedIllness, "Please select illness status", silent);
       ok = false;
     }
+
+    if (!validateKYC(silent)) ok = false;
 
     if (prolongedIllness?.value === "Yes") {
       if (!illnessName?.value.trim()) {
@@ -1302,23 +1315,18 @@ document.addEventListener("DOMContentLoaded", () => {
       showError(ifsc, "Invalid IFSC Code", silent);
       ok = false;
     }
-    // ----- PAN -----
-    if (!realPan) {
-      showError(pan, "PAN is required", silent);
-      ok = false;
-    } else if (!panPattern.test(realPan)) {
-      showError(pan, "Invalid PAN format (ABCDE1234F)", silent);
-      ok = false;
-    }
 
-    // ----- Aadhaar -----
-    if (!realAadhaar) {
-      showError(aadhaar, "Aadhaar is required", silent);
-      ok = false;
-    } else if (!aadhaarPlain.test(realAadhaar)) {
-      showError(aadhaar, "Aadhaar must be 12 digits", silent);
-      ok = false;
-    }
+    step.querySelectorAll("input, textarea").forEach(el => {
+      if (isSkippable(el)) return;
+
+      if (!el.value.trim()) {
+        showError(el, "Required", silent);
+        ok = false;
+      }
+    });
+
+    // ----- PAN -----
+
 
     const email = step.querySelector("#email");
 
@@ -1499,9 +1507,13 @@ document.addEventListener("DOMContentLoaded", () => {
       const board = row.querySelector("input[name='board']");
       const degree = row.querySelector("input[name='degree']");
       const stream = row.querySelector("input[name='stream']");
-      const join = row.querySelector("input[name='joiningYear']");
-      const leave = row.querySelector("input[name='leavingYear']");
+      const joinYear = row.querySelector("input[name='joiningYear']");
+      const leaveYear = row.querySelector("input[name='leavingYear']");
+
       const percent = row.querySelector("input[name='percentage']");
+
+      // allowOnlyYear(joinYear);
+      // allowOnlyYear(leaveYear);
 
       /* ---------- Alphabet‑only fields ---------- */
       if (!college.value || !isAlphaOnly(college.value)) {
@@ -1524,19 +1536,28 @@ document.addEventListener("DOMContentLoaded", () => {
         ok = false;
       }
 
+
       /* ---------- Year validation ---------- */
-      if (!isYear(join.value)) {
-        showError(join, "Enter valid 4‑digit joining year", silent);
+      if (!isYear(joinYear.value)) {
+        showError(joinYear, "Enter valid 4-digit joining year", silent);
         ok = false;
       }
 
-      if (!isYear(leave.value)) {
-        showError(leave, "Enter valid 4‑digit leaving year", silent);
+      if (!isYear(leaveYear.value)) {
+        showError(leaveYear, "Enter valid 4-digit leaving year", silent);
         ok = false;
       }
 
-      if (isYear(join.value) && isYear(leave.value) && +leave.value <= +join.value) {
-        showError(leave, "Leaving year must be after joining year", silent);
+      if (
+        isYear(joinYear.value) &&
+        isYear(leaveYear.value) &&
+        +leaveYear.value <= +joinYear.value
+      ) {
+        showError(
+          leaveYear,
+          "Leaving year must be after joining year",
+          silent
+        );
         ok = false;
       }
 
@@ -1649,18 +1670,25 @@ document.addEventListener("DOMContentLoaded", () => {
       ok = false;
     }
 
-    const strengths = step.querySelector('textarea[placeholder="Strengths"]');
-    const weaknesses = step.querySelector('textarea[placeholder="Weaknesses"]');
+    const strengths = document.getElementById("strengths");
+    const weaknesses = document.getElementById("Weaknesses");
+    const values = document.getElementById("Values");
 
-    if (strengths && isBlank(strengths.value)) {
+    if (!strengths || isBlank(strengths.value)) {
       showError(strengths, "Strengths are required", silent);
       ok = false;
     }
 
-    if (weaknesses && isBlank(weaknesses.value)) {
+    if (!weaknesses || isBlank(weaknesses.value)) {
       showError(weaknesses, "Weaknesses are required", silent);
       ok = false;
     }
+
+    if (!values || isBlank(values.value)) {
+      showError(values, "Values are required", silent);
+      ok = false;
+    }
+
 
     // Get all selects in Step-3
     step.querySelectorAll("select + textarea").forEach(textarea => {
@@ -1695,52 +1723,61 @@ document.addEventListener("DOMContentLoaded", () => {
   /* =========================================================
     STEP 4 – EXPERIENCE
   ========================================================= */
-  const employmentRequiredSelectors = [
-    '#employmentHistory input[type="text"]',
-    '#employmentHistory input[type="date"]',
-    '#employmentHistory textarea'
-  ];
-
-  const assignmentRequiredSelectors = [
-    '#assignmentsHandled input[type="text"]',
-    '#assignmentsHandled textarea'
-  ];
   function validateStep4(silent = false) {
     const step = steps[3];
     if (!silent) clearStepErrors(step);
 
     let ok = true;
 
-    const years = Number(document.getElementById("expYears")?.value || 0);
-    const months = Number(document.getElementById("expMonths")?.value || 0);
-    const hasExperience = years > 0 || months > 0;
-
-    // Fresher → skip entire step
-    if (!hasExperience) return true;
-
     const yearsEl = step.querySelector("#expYears");
     const monthsEl = step.querySelector("#expMonths");
 
-    if (yearsEl?.value === "" || monthsEl?.value === "") {
-      showError(yearsEl, "Enter years and months", silent);
-      showError(monthsEl, "Enter years and months", silent);
+    const years = Number(yearsEl?.value);
+    const months = Number(monthsEl?.value);
+
+    const hasExperience =
+      !isNaN(years) &&
+      !isNaN(months) &&
+      (years > 0 || months > 0);
+
+    // ✅ Fresher → skip entire step
+    if (!hasExperience) return true;
+
+    /* ================= TOTAL EXPERIENCE (REQUIRED) ================= */
+
+    if (yearsEl.value === "" || years < 0) {
+      showError(yearsEl, "Enter valid experience years", silent);
       ok = false;
     }
 
-    // Employment History – required
+    if (monthsEl.value === "" || months < 0 || months > 11) {
+      showError(monthsEl, "Enter months between 0 and 11", silent);
+      ok = false;
+    }
+
+    if (years === 0 && months === 0) {
+      showError(yearsEl, "Total experience cannot be 0", silent);
+      showError(monthsEl, "Total experience cannot be 0", silent);
+      ok = false;
+    }
+
+    /* ================= EMPLOYMENT HISTORY (REQUIRED) ================= */
     step.querySelectorAll("#employmentHistory input, #employmentHistory textarea")
       .forEach(el => {
-        if (el.offsetParent === null) return;
+        if (isSkippable(el)) return; // ✅ SINGLE LINE FIX
+
         if (!el.value.trim()) {
           showError(el, "This field is required", silent);
           ok = false;
         }
       });
 
-    // Assignments Handled – required
-    step.querySelectorAll("#assignmentsHandled input, #assignmentsHandled textarea")
+    /* ================= ASSIGNMENTS HANDLED (REQUIRED) ================= */
+    step
+      .querySelectorAll("#assignmentsHandled input, #assignmentsHandled textarea")
       .forEach(el => {
-        if (el.offsetParent === null) return;
+        if (isSkippable(el)) return;
+
         if (!el.value.trim()) {
           showError(el, "This field is required", silent);
           ok = false;
@@ -1750,7 +1787,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!ok && !silent) {
       showSummaryError(
         step,
-        "Please complete all Employment History and Assignments fields"
+        "Please complete Total Experience, Employment History, and Assignments"
       );
       focusFirstError(step);
     }
@@ -1859,9 +1896,46 @@ document.addEventListener("DOMContentLoaded", () => {
       ok = false;
     }
 
+    /* ===== LOAN AVAILED (MANDATORY SELECTION) ===== */
+    if (!loanAvailed?.value) {
+      showError(loanAvailed, "Please select Loan Availed (Yes / No)", silent);
+      ok = false;
+    }
+
+    /* ===== IF YES → LOAN DETAILS REQUIRED ===== */
+    if (loanAvailed?.value === "Yes") {
+      loanFields.style.display = "grid";
+
+      if (!loanPurpose?.value.trim()) {
+        showError(loanPurpose, "Loan purpose is required", silent);
+        ok = false;
+      }
+
+      if (!(+loanAmount?.value > 0)) {
+        showError(loanAmount, "Enter valid loan amount", silent);
+        ok = false;
+      }
+
+      if (
+        loanBalance?.value === "" ||
+        +loanBalance.value < 0 ||
+        +loanBalance.value > +loanAmount.value
+      ) {
+        showError(
+          loanBalance,
+          "Balance must be between 0 and Loan Amount",
+          silent
+        );
+        ok = false;
+      }
+
+      if (!(+loanSalary?.value > 0)) {
+        showError(loanSalary, "Enter salary amount", silent);
+        ok = false;
+      }
+    }
+
     /* ================= EXPERIENCE DEPENDENT ================= */
-
-
     if (hasExperience) {
 
       // ✅ Ensure sections visible
@@ -1878,48 +1952,25 @@ document.addEventListener("DOMContentLoaded", () => {
       salarySection
         ?.querySelectorAll("input, select")
         .forEach(el => {
-          if (el.offsetParent === null) return;
-          if (!el.value || Number(el.value) <= 0) {
+          if (isSkippable(el)) return;
+          if (
+            !el.value ||
+            (el.type === "number" && Number(el.value) <= 0)
+          ) {
             showError(el, "Required", silent);
             ok = false;
           }
         });
 
-      /* ================= LOAN (ONLY IF YES) ================= */
-      if (loanAvailed?.value === "Yes" && loanFields) {
-        loanFields.style.display = "grid";
-
-        if (!loanPurpose?.value.trim()) {
-          showError(loanPurpose, "Loan purpose required", silent);
-          ok = false;
-        }
-
-        if (!(+loanAmount.value > 0)) {
-          showError(loanAmount, "Enter valid loan amount", silent);
-          ok = false;
-        }
-
-        if (!(+loanBalance.value >= 0 && +loanBalance.value <= +loanAmount.value)) {
-          showError(
-            loanBalance,
-            "Balance must be ≥ 0 and ≤ Loan Amount",
-            silent
-          );
-          ok = false;
-        }
-
-        if (!(+loanSalary.value > 0)) {
-          showError(loanSalary, "Enter Salary", silent);
-          ok = false;
-        }
-      }
 
       /* ================= OTHER PARTICULARS (REQUIRED) ================= */
       otherSection
         ?.querySelectorAll("input, select, textarea")
         .forEach(el => {
           if (el.offsetParent === null) return;
-          if (!el.value || !el.value.trim()) {
+          if (isSkippable(el)) return;
+
+          if (!el.value.trim()) {
             showError(el, "Required", silent);
             ok = false;
           }
@@ -1954,6 +2005,34 @@ document.addEventListener("DOMContentLoaded", () => {
           .forEach(i => showError(i, "Required", silent));
 
         showStepError(step5, "At least one complete reference is required", silent);
+        ok = false;
+      }
+    }
+    /* ================= LOAN (ONLY IF YES) ================= */
+    if (loanAvailed?.value === "Yes" && loanFields) {
+      loanFields.style.display = "grid";
+
+      if (!loanPurpose?.value.trim()) {
+        showError(loanPurpose, "Loan purpose required", silent);
+        ok = false;
+      }
+
+      if (!(+loanAmount.value > 0)) {
+        showError(loanAmount, "Enter valid loan amount", silent);
+        ok = false;
+      }
+
+      if (!(+loanBalance.value >= 0 && +loanBalance.value <= +loanAmount.value)) {
+        showError(
+          loanBalance,
+          "Balance must be ≥ 0 and ≤ Loan Amount",
+          silent
+        );
+        ok = false;
+      }
+
+      if (!(+loanSalary.value > 0)) {
+        showError(loanSalary, "Enter Salary", silent);
         ok = false;
       }
     }
@@ -2158,8 +2237,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!validators[i](false)) return;
     }
 
-    const formData = collectFormData(); // your form → JSON function
-    await submitFormOnlineOrOffline(formData);
+    const payload = collectFormDataForSubmit(); // your form → JSON function
+    await submitFormOnlineOrOffline(payload);
   };
 
 
@@ -2263,14 +2342,12 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    // restore PAN
-    if (draft.fields?.pan && panInput) {
+    if (draft.fields?.pan) {
       realPan = draft.fields.pan;
       panInput.value = realPan.slice(0, 2) + "****" + realPan.slice(6);
     }
 
-    // restore Aadhaar
-    if (draft.fields?.aadhaar && aadhaarInput) {
+    if (draft.fields?.aadhaar) {
       realAadhaar = draft.fields.aadhaar;
       aadhaarInput.value = "XXXXXXXX" + realAadhaar.slice(8);
     }
