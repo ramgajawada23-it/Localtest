@@ -224,7 +224,8 @@
 
           <!-- KYC Details -->
           <h4>KYC Details</h4>
-
+          <input type="hidden" id="pan_real" name="pan" />
+          <input type="hidden" id="aadhaar_real" name="aadhaar" />
           <div class="grid-3">
             <div class="form-field">
               <input type="text" id="pan" placeholder="PAN Number" name="pan">
@@ -969,14 +970,13 @@
   </div> <!-- layout -->
 
   <script src="offline-db.js"></script>
-  <script src="form.js"></script>
+<script type="module" src="form.js"></script>
 
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("./service-worker.js");
-
     }
   </script>
-</body>
 
+</body>
 </html>

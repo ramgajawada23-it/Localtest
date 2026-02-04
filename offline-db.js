@@ -52,7 +52,7 @@ function openDB() {
 }
 
 // ================= DRAFT =================
-async function saveDraft(data) {
+async function saveDraftToDB(data) {
   const dbRef = await openDB();
   if (!dbRef) return;
 
@@ -64,7 +64,7 @@ async function saveDraft(data) {
   });
 }
 
-async function loadDraft() {
+async function loadDraftFromDB() {
   const dbRef = await openDB();
   if (!dbRef) return null;
 
