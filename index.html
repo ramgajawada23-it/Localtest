@@ -227,11 +227,15 @@
 
           <div class="grid-3">
             <div class="form-field">
-              <input type="text" id="pan" placeholder="PAN Number" name="pan">
+              <!-- Real value stored here -->
+              <input type="hidden" id="pan" name="pan">
+              <!-- Masked UI input -->
+              <input type="text" id="panDisplay" placeholder="PAN Number">
             </div>
 
             <div class="form-field">
-              <input type="text" id="aadhaar" placeholder="Aadhaar Number" name="aadhaar">
+              <input type="hidden" id="aadhaar" name="aadhaar">
+              <input type="text" id="aadhaarDisplay" placeholder="Aadhaar Number">
             </div>
 
             <div class="form-field">
@@ -244,7 +248,8 @@
               <input type="text" placeholder="Bank Name" id="bankName" name="bankName">
             </div>
             <div class="form-field">
-              <input type="text" id="bankAccount" placeholder="Account Number" 	name="bankAccount">
+              <input type="hidden" id="bankAccount" name="bankAccount">
+              <input type="text" id="bankAccountDisplay" placeholder="Account Number">
             </div>
           </div>
 
@@ -620,39 +625,39 @@
               <tbody>
                 <tr>
                   <td>Basic</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_basic"></td>
                   <td>LTA</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_lta"></td>
                   <td>PF</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_pf"></td>
                 </tr>
                 <tr>
                   <td>DA</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_da"></td>
                   <td>Medical</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_medical"></td>
                   <td>Gratuity</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_gratuity"></td>
                 </tr>
                 <tr>
                   <td>Conveyance Allowance</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_conveyance"></td>
                   <td>Bonus / Ex‑gratia</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_bonus"></td>
                   <td>Superannuation</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_superannuation"></td>
                 </tr>
                 <tr>
                   <td>Education Allowance</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_education"></td>
                   <td>Others</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_other1"></td>
                   <td>Others</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_other2"></td>
                 </tr>
                 <tr>
                   <td>House Rent Allowance</td>
-                  <td><input type="number"></td>
+                  <td><input type="number" name="salary_hra"></td>
                   <td></td>
                   <td></td>
                   <td></td>
@@ -721,22 +726,22 @@
               <tbody>
                 <tr>
                   <td>1</td>
-                  <td><input></td>
-                  <td><input></td>
-                  <td><input></td>
+                  <td><input name="ref[0][name]"></td>
+                  <td><input name="ref[0][occupation]"></td>
+                  <td><input name="ref[0][address]"></td>
                 </tr>
                 <tr>
                   <td>2</td>
-                  <td><input></td>
-                  <td><input></td>
-                  <td><input></td>
+                  <td><input name="ref[1][name]"></td>
+                  <td><input name="ref[1][occupation]"></td>
+                  <td><input name="ref[1][address]"></td>
                 </tr>
               </tbody>
             </table>
 
             <div class="form-field">
               <label>Do you have any objection if we refer to your employer?</label>
-              <select>
+              <select name="objectionToRefer">
                 <option>Select</option>
                 <option>Yes</option>
                 <option>No</option>
@@ -750,10 +755,10 @@
 
             <div class="grid-2">
               <div class="form-field">
-                <input type="number" placeholder="How soon can you join (Days)">
+                <input type="number" placeholder="How soon can you join (Days)" name="joiningDays">
               </div>
               <div class="form-field">
-                <select>
+                <select name="interviewedBefore">
                   <option>Have you been interviewed by us before?</option>
                   <option>Yes</option>
                   <option>No</option>
@@ -762,12 +767,12 @@
             </div>
 
             <div class="grid-3">
-              <div class="form-field"><input type="date" placeholder="Date"></div>
-              <div class="form-field"><input placeholder="Place"></div>
-              <div class="form-field"><input placeholder="Name of Interviewer"></div>
+              <div class="form-field"><input type="date" placeholder="Date" name="interviewDate"></div>
+              <div class="form-field"><input placeholder="Place" name="interviewPlace"></div>
+              <div class="form-field"><input placeholder="Name of Interviewer" name="interviewerName"></div>
             </div>
 
-            <div class="form-field"><input placeholder="For which post"></div>
+            <div class="form-field"><input placeholder="For which post" name="interviewPost"></div>
           </section>
           <hr>
 
@@ -783,19 +788,19 @@
             </p>
 
             <div class="form-field declaration-agree">
-              <input type="checkbox" id="declaration">
+              <input type="checkbox" id="declaration" name="declarationAgreed">
               <label for="declaration">I agree to the above declaration</label>
             </div>
 
             <div class="grid-2 bottom-section">
               <div class="form-field">
                 <label>DATE</label>
-                <input type="date" id="declDate">
+                <input type="date" id="declDate" name="declarationDate">
               </div>
 
               <div class="form-field">
                 <label>PLACE</label>
-                <input type="text" id="declPlace">
+                <input type="text" id="declPlace" name="declarationPlace">
               </div>
             </div>
 
