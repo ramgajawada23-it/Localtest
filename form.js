@@ -1,5 +1,13 @@
 // form.js
 let isOnline = navigator.onLine;
+let realPan = "";
+let realAadhaar = "";
+let realBankAccount = "";
+let isRestoring = false;
+
+window.debouncedSaveDraft = function () {
+  console.warn("debouncedSaveDraft called before initialization");
+};
 
 function getCandidateFullName() {
   const fn = document.getElementById("firstName")?.value || "";
@@ -9,6 +17,7 @@ function getCandidateFullName() {
 /* =========================================================
   GLOBAL HELPERS
 ========================================================= */
+const API_BASE = "https://offlineform.onrender.com";
 window.addEventListener("online", () => {
   isOnline = true;
   console.log("Back online");
@@ -20,12 +29,79 @@ window.addEventListener("offline", () => {
   console.log("You are Offline. You can continue filling the form");
 });
 
-// window.load listener removed - IIFE handles initialization
+let lastDraftHash = "";
+
+async function saveDraft(draft) {
+  if (!draft?.formData) return;
+
+  const hash = JSON.stringify(draft);
+  if (hash === lastDraftHash) return;
+  lastDraftHash = hash;
+
+  // Always save locally
+  try {
+    const parsed = typeof draft.formData === "string"
+      ? JSON.parse(draft.formData)
+      : draft.formData;
+    await saveDraftToDB(parsed);
+  } catch {
+    console.warn("Invalid formData JSON, skipping local save");
+  }
+
+  if (!navigator.onLine) return;
+
+  try {
+    await fetch(`${API_BASE}/api/drafts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(draft)
+    });
+  } catch {
+    console.warn("Server draft save failed");
+  }
+}
+
+/* ---------- MARITAL STATUS TOGGLE ---------- */
+function toggleMaritalFields() {
+  const show = maritalStatus?.value === "Married";
+
+  if (marriageDate?.parentElement)
+    marriageDate.parentElement.style.display = show ? "block" : "none";
+
+  if (childrenCount?.parentElement)
+    childrenCount.parentElement.style.display = show ? "block" : "none";
+
+  if (!show) {
+    marriageDate.value = "";
+    childrenCount.value = "";
+    clearError(marriageDate);
+    clearError(childrenCount);
+  }
+}
+
+
+function toggleIllnessFields() {
+  const prolongedIllness = document.getElementById("illness");
+  const illnessName = document.getElementById("illnessName");
+  const illnessDuration = document.getElementById("illnessDuration");
+
+  const show = prolongedIllness?.value === "Yes";
+
+  if (illnessName?.parentElement)
+    illnessName.parentElement.style.display = show ? "block" : "none";
+
+  if (illnessDuration?.parentElement)
+    illnessDuration.parentElement.style.display = show ? "block" : "none";
+
+  if (!show) {
+    if (illnessName) illnessName.value = "";
+    if (illnessDuration) illnessDuration.value = "";
+  }
+}
 
 function isVisible(el) {
   return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
 }
-
 
 function collectFormData() {
   const data = {};
@@ -49,29 +125,56 @@ async function restoreDraftState(data) {
 
   isRestoring = true;
 
-  // 1. Restore Dynamic Family Rows
-  if (data.fields) {
+  try {
+    // 1️⃣ Restore dynamic rows FIRST
+    if (data.fields) {
       restoreFamilyRows(data.fields);
-  }
+      restoreLanguageRows(data.fields);
+    }
 
-  // 2. Restore Education Rows
-  if (data.educationRows) {
-      restoreEducationRows(data.educationRows);
-  }
+    // 2️⃣ Delay actual field population
+    setTimeout(() => {
+      try {
+        if (data.fields) {
+          restoreFormData(data.fields);
+          restoreMaskedKYC(data.fields);
+        }
+        // 🔁 Recalculate derived / conditional fields
+        recalculateAge();
+        toggleIllnessFields();
+        toggleMaritalFields();
+        toggleExperienceDependentSections();
+        validateStep3Languages(true);
 
-  // 3. Fill Form Data
-  if (data.fields) {
-      restoreFormData(data.fields);
-      restoreMaskedKYC(data.fields);
-  }
+        if (typeof data.step === "number") {
+          showStep(data.step);
+        }
+        if (Array.isArray(data.educationRows)) {
+          restoreEducationRows(data.educationRows);
+        }
 
-  // 4. Update UI States
-  recalculateAge();
-  toggleIllnessFields();
-  toggleMaritalFields();
-  toggleExperienceDependentSections();
-  
-  isRestoring = false;
+      } finally {
+        isRestoring = false;
+      }
+    }, 50); // 🔥 use 50ms not 0
+
+  } catch (err) {
+    console.error("Restore failed:", err);
+    isRestoring = false;
+  }
+}
+
+function toggleExperienceDependentSections() {
+  const years = parseInt(document.getElementById("expYears")?.value || 0);
+  const months = parseInt(document.getElementById("expMonths")?.value || 0);
+
+  const show = years > 0 || months > 0;
+
+  const expSection = document.getElementById("experienceDetails");
+
+  if (expSection) {
+    expSection.style.display = show ? "block" : "none";
+  }
 }
 
 function restoreFamilyRows(fields) {
@@ -93,56 +196,156 @@ function restoreFamilyRows(fields) {
   const requiredCount = maxIndex + 1;
 
   for (let i = 0; i < requiredCount; i++) {
-     addFamilyRow(); 
+    addFamilyRow();
+  }
+
+  // Update relationship options after restoring rows
+  setTimeout(() => {
+    updateFamilyRelationshipOptions();
+    const tbody = document.getElementById("familyTableBody");
+    if (tbody) tbody.querySelectorAll("tr").forEach(bindFamilyRowAutosave);
+  }, 0);
+}
+
+function restoreLanguageRows(fields) {
+  const tbody = document.querySelector("#languageTable tbody");
+  if (!tbody || !fields) return;
+
+  // Clear all rows first
+  tbody.innerHTML = "";
+
+  let maxIndex = -1;
+
+  Object.keys(fields).forEach(key => {
+    const match = key.match(/^languages\[(\d+)\]/);
+    if (match) {
+      maxIndex = Math.max(maxIndex, parseInt(match[1]));
+    }
+  });
+
+  if (maxIndex < 0) return;
+
+  for (let i = 0; i <= maxIndex; i++) {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>
+        <input type="text" name="languages[${i}][name]">
+      </td>
+      <td>
+        <input type="checkbox" name="languages[${i}][speak]">
+      </td>
+      <td>
+        <input type="checkbox" name="languages[${i}][read]">
+      </td>
+      <td>
+        <input type="checkbox" name="languages[${i}][write]">
+      </td>
+      <td>
+        <input type="radio" name="motherTongue" value="${i}">
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+
+    // Bind autosave safely
+    tr.querySelectorAll("input").forEach(el => {
+      el.addEventListener("input", window.debouncedSaveDraft);
+      el.addEventListener("change", window.debouncedSaveDraft);
+    });
   }
 }
+
+
 
 function restoreFormData(data) {
   if (!data) return;
 
-  document.querySelectorAll("input, select, textarea").forEach(el => {
-    if (!el.name || !(el.name in data)) return;
+  Object.entries(data).forEach(([key, value]) => {
+    // PAN & Aadhaar & Bank Account handled separately by restoreMaskedKYC
+    if (key === "pan" || key === "aadhaar" || key === "bankAccount") return;
 
-    // PAN & Aadhaar & Bank Account handled separately
-    if (el.name === "pan" || el.name === "aadhaar" || el.id === "panDisplay" || el.id === "aadhaarDisplay" || el.id === "bankAccountDisplay") return;
-
-    if (el.type === "radio") {
-      el.checked = el.value === data[el.name];
-    } else if (el.type === "checkbox") {
-      el.checked = !!data[el.name];
-    } else {
-      el.value = data[el.name];
+    const field = document.querySelector(`[name="${key}"]`);
+    if (field) {
+      let target = field;
+      if (field.type === "radio") {
+        const matching = document.querySelector(`input[name="${key}"][value="${value}"]`);
+        if (matching) {
+          matching.checked = true;
+          target = matching;
+        }
+      } else if (field.type === "checkbox") {
+        field.checked = !!value;
+      } else {
+        field.value = value || "";
+      }
+      target.dispatchEvent(new Event("input", { bubbles: true }));
     }
   });
 
-  // 🔁 Recalculate derived / conditional fields
-  recalculateAge();
-  toggleIllnessFields();
-  toggleMaritalFields();
-  toggleExperienceDependentSections();
 }
 
 function restoreMaskedKYC(data) {
-  if (data.pan && panPattern.test(data.pan)) {
+  if (!data) return;
+
+  const panHidden = document.getElementById("pan");
+  const panDisplay = document.getElementById("panDisplay");
+  const aadhaarHidden = document.getElementById("aadhaar");
+  const aadhaarDisplay = document.getElementById("aadhaarDisplay");
+  const bankHidden = document.getElementById("bankAccount");
+  const bankDisplay = document.getElementById("bankAccountDisplay");
+
+  console.log("🔍 Restoring KYC data:", {
+    pan: data.pan,
+    aadhaar: data.aadhaar,
+    bankAccount: data.bankAccount
+  });
+
+  // PAN
+  if (data.pan && panHidden && panDisplay) {
     realPan = data.pan;
-    document.getElementById("pan").value = realPan;
-    document.getElementById("panDisplay").value = data.pan.slice(0, 2) + "****" + data.pan.slice(6);
+    panHidden.value = data.pan;
+
+    // Only mask if it's a valid PAN format (10 chars)
+    if (data.pan.length === 10) {
+      panDisplay.value = data.pan.slice(0, 2) + "****" + data.pan.slice(6);
+      console.log("✅ PAN restored and masked");
+    } else {
+      panDisplay.value = data.pan;
+      console.log("⚠️ PAN restored but not masked (invalid length)");
+    }
   }
 
-  if (data.aadhaar && /^\d{12}$/.test(data.aadhaar)) {
+  // Aadhaar
+  if (data.aadhaar && aadhaarHidden && aadhaarDisplay) {
     realAadhaar = data.aadhaar;
-    document.getElementById("aadhaar").value = realAadhaar;
-    document.getElementById("aadhaarDisplay").value = "XXXXXXXX" + data.aadhaar.slice(8);
+    aadhaarHidden.value = data.aadhaar;
+
+    // Only mask if it's a valid Aadhaar format (12 digits)
+    if (data.aadhaar.length === 12) {
+      aadhaarDisplay.value = "XXXXXXXX" + data.aadhaar.slice(-4);
+      console.log("✅ Aadhaar restored and masked");
+    } else {
+      aadhaarDisplay.value = data.aadhaar;
+      console.log("⚠️ Aadhaar restored but not masked (invalid length)");
+    }
   }
 
-  if (data.bankAccount && data.bankAccount.length >= 8) {
+  // Bank Account
+  if (data.bankAccount && bankHidden && bankDisplay) {
     realBankAccount = data.bankAccount;
-    document.getElementById("bankAccount").value = realBankAccount;
-    document.getElementById("bankAccountDisplay").value = "XXXXXX" + realBankAccount.slice(-4);
+    bankHidden.value = data.bankAccount;
+
+    // Only mask if it's at least 8 digits
+    if (data.bankAccount.length >= 8) {
+      bankDisplay.value = "XXXXXX" + data.bankAccount.slice(-4);
+      console.log("✅ Bank Account restored and masked");
+    } else {
+      bankDisplay.value = data.bankAccount;
+      console.log("⚠️ Bank Account restored but not masked (invalid length)");
+    }
   }
 }
-
-// Redundant localstorage loadDraft removed.
 
 
 function recalculateAge() {
@@ -159,7 +362,6 @@ function recalculateAge() {
   if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
     age--;
   }
-
   ageEl.value = age;
 }
 
@@ -172,56 +374,32 @@ function isYear(value) {
   return /^\d{4}$/.test(value) && y >= 1900 && y <= 2099;
 }
 
-// Old submitOnline removed - replaced by submitFormOnlineOrOffline
-
-async function saveOfflineSubmission(data) {
-  // Uses IndexedDB from offline-db.js
-  await saveOffline({
-      data,
-      time: new Date().toISOString()
-  });
-}
-
 async function syncOfflineSubmissions() {
   if (!navigator.onLine) return;
 
-  const queue = await getOfflineData(); // from offline-db.js
-  if (queue.length === 0) return;
+  const queue = await getOfflineData();
+  if (!queue.length) return;
 
   for (const item of queue) {
     try {
-        const res = await fetch("http://localhost:8080/api/candidates", {
+      const res = await fetch(
+        `${API_BASE}/api/drafts?mobile=${encodeURIComponent(item.mobile)}`,
+        {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(item.data)
-        });
-
-        if (!res.ok) throw new Error();
-        console.log("Synced offline form");
-        
-        // Use the same helper as the online listener if available, 
-        // otherwise we might need to rely on clearOfflineData if we can't remove single.
-        // Assuming removeOfflineSubmission is globally available (used in bottom listener)
-        if (typeof removeOfflineSubmission === 'function') {
-            await removeOfflineSubmission(item.id);
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(item)
         }
-    } catch (e) {
-       console.warn("Sync failed for item", e);
+      );
+      if (!res.ok) throw new Error("Upload failed");
+    } catch {
+      console.warn("Will retry later");
+      return; // stop but keep offline data
     }
   }
-  
-  // Only clear all if we didn't remove individually? 
-  // If removeOfflineSubmission exists, we don't need clearOfflineData()
-  // If it doesn't, we are safer not clearing all if some failed.
-  if (typeof removeOfflineSubmission !== 'function') {
-      // Fallback: dangerous clear, but requested adjustment is to be safe.
-      // If we can't remove single, we shouldn't clear all if errors.
-      // But we can't selectively save back easily without a helper.
-      // Leaving as is with a warning comment or try to use clearOfflineData ONLY if no errors?
-      // Better: if all succeeded.
-  }
+
+  // ✅ only clear after ALL succeed
+  await clearOfflineData();
+  console.log("All offline submissions synced");
 }
 
 const isFutureDate = d => d && new Date(d) > new Date();
@@ -244,12 +422,6 @@ const heightPattern = /^[1-8]'([0-9]|1[01])$/;
 const panPattern = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const aadhaarPlain = /^\d{12}$/;
 
-let realPan = "";
-let realAadhaar = "";
-let realBankAccount = "";
-// let isRestoringDraft = false; // Consolidated to isRestoring
-
-let isRestoring = false;
 
 window.addFamilyRow = () => {
   const tbody = document.getElementById("familyTableBody");
@@ -257,7 +429,6 @@ window.addFamilyRow = () => {
   if (!tbody) return;
 
   const index = tbody.children.length;
-
   const tr = document.createElement("tr");
   tr.innerHTML = `
       <td>${index + 1}</td>
@@ -285,13 +456,20 @@ window.addFamilyRow = () => {
     `;
   tbody.appendChild(tr);
 
+  // ✅ Limit income to 6 digits (CORRECT PLACE)
+  const incomeInput = tr.querySelector("input[name*='income']");
+  incomeInput.addEventListener("input", e => {
+    let v = e.target.value.replace(/\D/g, "");
+    if (v.length > 6) v = v.slice(0, 6);
+    e.target.value = v;
+  });
+
   // ✅ THIS WAS MISSING
   const rel = tr.querySelector("select[name*='relationship']");
   rel.addEventListener("change", () => {
     syncFamilyRow(tr);
     updateFamilyRelationshipOptions(); // ✅ ADD THIS
   });
-
   bindFamilyRowAutosave(tr);
 };
 
@@ -321,8 +499,14 @@ function syncFamilyRow(row) {
   } else if (rel.value === "Mother") {
     nameInput.value = motherName || "";
     nameInput.readOnly = true;
+  } else {
+    if (
+      (fatherName && nameInput.value === fatherName) ||
+      (motherName && nameInput.value === motherName)
+    ) {
+      nameInput.value = "";
+    }
   }
-
   dobInputRow.readOnly = false;
 }
 
@@ -336,7 +520,6 @@ function updateFamilyRelationshipOptions() {
   rows.forEach(row => {
     const rel = row.querySelector("select[name*='relationship']");
     if (!rel) return;
-
     if (rel.value === "Father") fatherUsed = true;
     if (rel.value === "Mother") motherUsed = true;
   });
@@ -411,9 +594,13 @@ function fillMediclaimEmployeeDetails() {
 // run when entering step‑6
 function showStep(index) {
   steps.forEach((step, i) => step.classList.toggle("active", i === index));
-  stepperSteps.forEach((circle, i) =>
-    circle.classList.toggle("active", i <= index)
-  );
+
+  // Safety check for stepperSteps
+  if (window.stepperSteps) {
+    stepperSteps.forEach((circle, i) =>
+      circle.classList.toggle("active", i <= index)
+    );
+  }
 
   if (index === 5) { // Step‑6
     fillMediclaimEmployeeDetails();
@@ -443,6 +630,12 @@ function ensureVisibleError(step) {
   }
 }
 
+document.addEventListener("change", e => {
+  if (e.target.closest("#familyTableBody")) {
+    fillMediclaimFamilyDetails();
+  }
+});
+
 function fillMediclaimFamilyDetails() {
   const tbody = document.getElementById("mediclaimFamilyBody");
   if (!tbody) return;
@@ -455,7 +648,12 @@ function fillMediclaimFamilyDetails() {
   rows.forEach(row => {
     const relation = row.querySelector("select[name*='relationship']")?.value || "";
     const name = row.querySelector("input[name*='name']")?.value || "";
-    const dob = row.querySelector("input[name*='dob']")?.value || "";
+    let dob = row.querySelector("input[name*='dob']")?.value || "";
+
+    if (dob) {
+      const [year, month, day] = dob.split("-");
+      dob = `${day}/${month}/${year}`;
+    }
 
     if (!relation || !name) return;
 
@@ -523,7 +721,6 @@ function allowOnlyYear(input) {
   });
 }
 
-
 function allowOnlyAlphabets(input) {
   input.addEventListener("input", e => {
     e.target.value = e.target.value.replace(/[^A-Za-z .]/g, "");
@@ -532,180 +729,305 @@ function allowOnlyAlphabets(input) {
 
 function isSkippable(el) {
   return (
-    !el ||                
+    !el ||
     el.disabled ||
     el.readOnly ||
     el.offsetParent === null ||
     el.id === "pan" ||
-    el.id === "aadhaar"
+    el.id === "aadhaar" ||
+    el.id === "bankAccount"
   );
 }
 
-let autosaveInterval = null;
+let serverDraft = null;
+
+async function loadDraft(mobile) {
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/drafts?mobile=${encodeURIComponent(mobile)}`
+    );
+
+    if (response.status === 204) {
+      return null; // no draft found
+    }
+
+    if (!response.ok) return null;
+
+    serverDraft = await response.json(); // ✅ DEFINED HERE
+    return serverDraft;
+  } catch {
+    return null;
+  }
+}
+
+function clearError(el) {
+  if (!el) return;
+  el.classList.remove("error");
+  const next = el.nextElementSibling;
+  if (next && next.classList.contains("error-text")) next.remove();
+}
+
+function showError(el, msg, silent = false) {
+  if (silent || !el) return;
+
+  clearError(el); // ✅ prevents stacking
+
+  el.classList.add("error");
+
+  const s = document.createElement("small");
+  s.className = "error-text";
+  s.innerText = msg;
+  el.after(s);
+}
+  // Global validateStep3Languages function with silent parameter support
+  function validateStep3Languages(silent = false) {
+    let ok = true;
+
+    const rows = document.querySelectorAll("#languageTable tbody tr");
+    const motherTongues = document.querySelectorAll(
+      'input[name="motherTongue"]:checked'
+    );
+
+    // ✅ Exactly ONE mother tongue required
+    if (motherTongues.length !== 1) {
+      if (!silent) {
+        alert("Select exactly one Mother Tongue");
+      }
+      ok = false;
+    }
+
+    rows.forEach(row => {
+      const nameInput = row.querySelector("input[name*='[name]']");
+      const speak = row.querySelector("input[name*='[speak]']");
+      const read = row.querySelector("input[name*='[read]']");
+      const write = row.querySelector("input[name*='[write]']");
+
+      const name = nameInput?.value.trim();
+      const hasSkill = speak?.checked || read?.checked || write?.checked;
+
+      // 🚫 Skip completely empty row
+      if (!name && !hasSkill) {
+        return;
+      }
+
+      // ❌ Name missing
+      if (!name) {
+        showError(nameInput, "Language name required", silent);
+        ok = false;
+      }
+
+      // ❌ Skill missing
+      if (!hasSkill) {
+        showError(nameInput, "Select at least one skill", silent);
+        ok = false;
+      }
+    });
+
+    return ok;
+  }
 
 /* =========================================================
   MAIN
 ========================================================= */
+let steps = [];
+
 document.addEventListener("DOMContentLoaded", () => {
+  steps = document.querySelectorAll(".form-step");
 
-  (async () => {
+  const loggedInMobile =
+    sessionStorage.getItem("loggedInMobile") ||
+    localStorage.getItem("loggedInMobile");
+
+  if (!loggedInMobile) {
+    window.location.href = "login.html";
+    return;
+  }
+
+  (async function restoreDraftFlow() {
     try {
       await openDB();
-      console.log("IndexedDB ready");
-    } catch (e) {
-      console.warn("IndexedDB not available");
-    }
-  })();
+      // setupEducationTable();
+      // 1️⃣ Try server first
+      serverDraft = await loadDraft(loggedInMobile);
 
-  (async () => {
-    try {
-      await openDB();
-      console.log("IndexedDB ready");
+      if (serverDraft?.formData) {
+        const parsed = typeof serverDraft.formData === "string"
+          ? JSON.parse(serverDraft.formData)
+          : serverDraft.formData;
 
-      // 1️⃣ Load draft (IndexedDB or server)
-      const draft = await loadDraftFromDB(); // or fetchServerDraft()
+        await restoreDraftState(parsed);
+        return;
+      }
 
-      // 2️⃣ Restore everything
-      if (draft) {
-        await restoreDraftState(draft);
+      // 2️⃣ Fallback to IndexedDB
+      const localDraft = await loadDraftFromDB();
+      if (localDraft) {
+        await restoreDraftState(localDraft);
       }
     } catch (err) {
-      console.error("Failed to restore draft", err);
+      console.error("Draft restore failed:", err);
     }
   })();
 
+  document.getElementById("addEducationBtn")
+    ?.addEventListener("click", () => {
+      addEducationRow({});
+      debouncedSaveDraft();
+    });
 
   let currentStep = 0;
   let isSubmitting = false;
 
   window._debugCurrentStep = () => currentStep;
-  setupEducationTable();
-  const loggedInMobile = sessionStorage.getItem("loggedInMobile");
+
   const formStatus = sessionStorage.getItem("formStatus");
-  const serverDraft = sessionStorage.getItem("serverDraft");
-  const mobile = sessionStorage.getItem("loggedInMobile");
 
 
-  function clearAutosave() {
-  }
+function addEducationRow(data = {}) {
+  const tbody = document.querySelector(".graduation-wrapper table tbody");
+  if (!tbody) return;
 
-
-function addEducationRow(data = null, showDelete = true) {
-  const tbody = document.getElementById("educationTableBody");
   const tr = document.createElement("tr");
-  tr.classList.add("education-row");
-
   tr.innerHTML = `
-    <td><input type="text" name="collegeName" value="${data?.college || ""}"></td>
-    <td><input type="text" name="board" value="${data?.board || ""}"></td>
-    <td><input type="text" name="degree" value="${data?.degree || ""}"></td>
-    <td><input type="text" name="stream" value="${data?.stream || ""}"></td>
-    <td><input type="text" name="joiningYear" value="${data?.joinYear || ""}"></td>
-    <td><input type="text" name="leavingYear" value="${data?.leaveYear || ""}"></td>
-    <td><input type="number" name="percentage" value="${data?.aggregate || ""}"></td>
-    ${showDelete ? `<td><button type="button" class="btn-delete">Delete</button></td>` : ""}
+    <td><input type="text" name="grad_college[]" value="${data.college || ""}"></td>
+    <td><input type="text" name="grad_board[]" value="${data.board || ""}"></td>
+    <td><input type="text" name="grad_degree[]" value="${data.degree || ""}"></td>
+    <td><input type="text" name="grad_stream[]" value="${data.stream || ""}"></td>
+    <td><input type="number" name="grad_joining[]" value="${data.joining || ""}"></td>
+    <td><input type="number" name="grad_leaving[]" value="${data.leaving || ""}"></td>
+    <td><input type="number" name="grad_aggregate[]" value="${data.aggregate || ""}"></td>
+    <td>
+      <button type="button" class="deleteRow">Delete</button>
+    </td>
   `;
 
-  // Input restrictions
-  allowOnlyAlphabets(tr.querySelector("[name='collegeName']"));
-  allowOnlyAlphabets(tr.querySelector("[name='board']"));
-  allowOnlyAlphabets(tr.querySelector("[name='degree']"));
-  allowOnlyAlphabets(tr.querySelector("[name='stream']"));
-  allowOnlyYear(tr.querySelector("[name='joiningYear']"));
-  allowOnlyYear(tr.querySelector("[name='leavingYear']"));
-
-  if (showDelete) {
-    tr.querySelector(".btn-delete").onclick = () => {
-      tr.remove();
-      debouncedSaveDraft();
-    };
-  }
+  tr.querySelector(".deleteRow").addEventListener("click", function () {
+    tr.remove();
+    debouncedSaveDraft();
+  });
 
   tbody.appendChild(tr);
 }
 
 
-function getEducationRowsData() {
-  const rows = [];
-  document.querySelectorAll("#educationTableBody tr").forEach(tr => {
-    const inputs = tr.querySelectorAll("input");
-    rows.push({
-      college: inputs[0].value,
-      board: inputs[1].value,
-      degree: inputs[2].value,
-      stream: inputs[3].value,
-      joinYear: inputs[4].value,
-      leaveYear: inputs[5].value,
-      aggregate: inputs[6].value
+
+  function getEducationRowsData() {
+    const rows = [];
+
+    // First fixed graduation row
+    const firstGrad = document.querySelector(".graduation-wrapper table tbody tr");
+    if (firstGrad) {
+      const inputs = firstGrad.querySelectorAll("input");
+      rows.push({
+        college: inputs[0].value,
+        board: inputs[1].value,
+        degree: inputs[2].value,
+        stream: inputs[3].value,
+        joining: inputs[4].value,
+        leaving: inputs[5].value,
+        aggregate: inputs[6].value
+      });
+    }
+
+    // Extra graduation rows
+    document.querySelectorAll("#extraGraduations table tbody tr").forEach(tr => {
+      const inputs = tr.querySelectorAll("input");
+      rows.push({
+        college: inputs[0].value,
+        board: inputs[1].value,
+        degree: inputs[2].value,
+        stream: inputs[3].value,
+        joining: inputs[4].value,
+        leaving: inputs[5].value,
+        aggregate: inputs[6].value
+      });
     });
-  });
-  return rows;
-}
-// Old saveEducationRows (localStorage) removed
 
-
-function restoreEducationRows(saved = []) {
-  const tbody = document.getElementById("educationTableBody");
-  tbody.innerHTML = "";
-
-  if (!saved || saved.length === 0) {
-    addEducationRow(null, false); // default row
-    return;
+    return rows;
   }
+  // Old saveEducationRows (localStorage) removed
 
-  saved.forEach((row, index) => {
-    addEducationRow(row, index !== 0);
-  });
-}
+  window.restoreEducationRows = function (saved = []) {
+    if (!Array.isArray(saved) || saved.length === 0) return;
 
-  function setupEducationTable() {
-  const addBtn = document.getElementById("addEducationBtn");
-  if (!addBtn) return;
+    // Restore first row
+    const firstGrad = document.querySelector(".graduation-wrapper table tbody tr");
+    if (firstGrad && saved[0]) {
+      const inputs = firstGrad.querySelectorAll("input");
+      inputs[0].value = saved[0].college || "";
+      inputs[1].value = saved[0].board || "";
+      inputs[2].value = saved[0].degree || "";
+      inputs[3].value = saved[0].stream || "";
+      inputs[4].value = saved[0].joining || "";
+      inputs[5].value = saved[0].leaving || "";
+      inputs[6].value = saved[0].aggregate || "";
+    }
 
-  addBtn.addEventListener("click", () => {
-    addEducationRow(null, true);
-    debouncedSaveDraft();
-  });
-}
+    // Restore extra rows
+    for (let i = 1; i < saved.length; i++) {
+      addEducationRow(saved[i]);
+    }
+  };
 
 
-function removeRow(btn) {
-  btn.closest("tr").remove();
-  debouncedSaveDraft();
-}
+  // function setupEducationTable() {
+  //   const tbody = document.getElementById("educationTableBody");
+  //   if (!tbody) return;
+
+  //   tbody.innerHTML = "";
+
+  //   addEducationRow(null, false); 
+  //   addEducationRow(null, false); 
+  //   addEducationRow(null, false);
+
+  //   const addBtn = document.getElementById("addEducationBtn");
+  //   addBtn?.addEventListener("click", () => {
+  //     addEducationRow(null, true);
+  //     debouncedSaveDraft();
+  //   });
+  // }
+
+  // function removeRow(btn) {
+  //   btn.closest("tr").remove();
+  //   debouncedSaveDraft();
+  // }
 
   document.addEventListener("input", e => {
-  if (e.target.closest("#educationTableBody")) {
-    debouncedSaveDraft();
-  }
-});
+    if (
+      e.target.closest(".graduation-wrapper") ||
+      e.target.closest("#extraGraduations")
+    ) {
+      debouncedSaveDraft();
+    }
+  });
+
+  ["loanAmount", "loanBalance", "loanSalary"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    el.addEventListener("input", function () {
+      this.value = this.value.replace(/\D/g, "").slice(0, 8);
+    });
+  });
 
 
   function stopAutosave() {
     // No-op: Interval removed in favor of event-based saving
   }
 
-  // store it globally so other functions can clear it
-  window._autosaveInterval = autosaveInterval;
-
-  if (mobile) {
+  if (loggedInMobile) {
     const mobile1 = document.getElementById("mobile1");
     const mobile2 = document.getElementById("mobile2");
 
     if (mobile1) {
-      mobile1.value = mobile;
+      mobile1.value = loggedInMobile;
       mobile1.readOnly = true;
     }
 
     if (mobile2) {
-      mobile2.value = mobile;
+      mobile2.value = loggedInMobile;
       mobile2.readOnly = true;
     }
-  }
-
-  if (!loggedInMobile) {
-    window.location.href = "./login.html";
-    return;
   }
 
   // restoreDraft(); // Removed (using async loadDraftFromDB on window.load)
@@ -747,7 +1069,7 @@ function removeRow(btn) {
     .forEach(initFamilyRow);
 
 
-  const steps = document.querySelectorAll(".form-step");
+
   const nextBtn = document.getElementById("nextBtn");
   const prevBtn = document.getElementById("prevBtn");
   const submitBtn = document.getElementById("submitBtn");
@@ -755,7 +1077,8 @@ function removeRow(btn) {
   let draftTimer;
   function debouncedSaveDraft() {
     if (isSubmitting) return;
-    if (!sessionStorage.getItem("loggedInMobile")) return; // ✅ ADD THIS
+    if (isRestoring || !loggedInMobile) return;
+    if (typeof saveDraft !== "function") return;
 
     clearTimeout(draftTimer);
     draftTimer = setTimeout(() => {
@@ -763,16 +1086,18 @@ function removeRow(btn) {
       const educationalParams = getEducationRowsData();
 
       saveDraft({
-        id: sessionStorage.getItem("loggedInMobile"),
-        mobile: sessionStorage.getItem("loggedInMobile"),
-        step: currentStep,
-        fields: {
-          ...data,
-          pan: realPan || "",
-          aadhaar: realAadhaar || "",
-          bankAccount: realBankAccount || ""
-        },
-        educationRows: educationalParams
+        mobile: loggedInMobile,
+        formData: JSON.stringify({
+          step: currentStep,
+          fields: {
+            ...data,
+            // Explicitly prefer real values for masked fields
+            pan: realPan || data.pan || "",
+            aadhaar: realAadhaar || data.aadhaar || "",
+            bankAccount: realBankAccount || data.bankAccount || ""
+          },
+          educationRows: educationalParams
+        })
       });
 
     }, 500);
@@ -780,9 +1105,7 @@ function removeRow(btn) {
   window.debouncedSaveDraft = debouncedSaveDraft;
 
 
-  document.getElementById("bankAccount")?.addEventListener("input", e => {
-    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 18);
-  });
+
 
   function syncAllFamilyRows() {
     document.querySelectorAll("#familyTableBody tr").forEach(syncFamilyRow);
@@ -836,65 +1159,22 @@ function removeRow(btn) {
       <input type="checkbox" name="languages[${index}][write]">
     </td>
     <td>
-      <input type="radio" name="motherTongue">
+      <input type="radio" name="motherTongue" value="${index}">
     </td>
   `;
 
     languageTableBody.appendChild(tr);
-  });
 
-  function validateStep3Languages() {
-    const checked = document.querySelectorAll(
-      '#languageSection input[type="checkbox"]:checked'
-    );
-
-    const manualInputs = document.querySelectorAll(
-      '#extraLanguages .language-input'
-    );
-
-    const error = document.getElementById("languageError");
-
-    let hasManualValue = false;
-    manualInputs.forEach(input => {
-      if (input.value.trim() !== "") hasManualValue = true;
+    // Bind autosave for new row
+    tr.querySelectorAll("input").forEach(el => {
+      el.addEventListener("input", debouncedSaveDraft);
+      el.addEventListener("change", debouncedSaveDraft);
     });
 
-    if (checked.length === 0 && !hasManualValue) {
-      if (error) {
-        error.style.display = "block";
-      }
-      document.getElementById("languageSection")?.scrollIntoView({
-        behavior: "smooth"
-      });
-      return false;
-    }
-
-    if (error) error.style.display = "none";
-    return true;
-  }
-
-
-  function toggleExperienceDependentSections() {
-    const years = Number(document.getElementById("expYears")?.value || 0);
-    const months = Number(document.getElementById("expMonths")?.value || 0);
-
-    const hasExperience = years > 0 || months > 0;
-
-    const employment = document.getElementById("employmentHistory");
-    const assignments = document.getElementById("assignmentsHandled");
-    const salary = document.getElementById("salarySection");
-    const reference = document.getElementById("referenceSection");
-
-    if (employment) employment.style.display = hasExperience ? "block" : "none";
-    if (assignments) assignments.style.display = hasExperience ? "block" : "none";
-    if (salary) salary.style.display = hasExperience ? "block" : "none";
-    if (reference) reference.style.display = hasExperience ? "block" : "none";
-  }
+  });
 
   // YEARS
-  document
-    .getElementById("expYears")
-    ?.addEventListener("input", toggleExperienceDependentSections);
+  // document.getElementById("expYears")?.addEventListener("input", toggleExperienceDependentSections);
 
   // MONTHS
   const monthsEl = document.getElementById("expMonths");
@@ -905,10 +1185,12 @@ function removeRow(btn) {
     e.target.value = v;
     toggleExperienceDependentSections();
   });
-  toggleExperienceDependentSections();
+  // toggleExperienceDependentSections();
 
   ["input", "change"].forEach(evt => {
-    document.addEventListener(evt, debouncedSaveDraft);
+    document
+      .querySelector("#candidateForm")
+      ?.addEventListener(evt, debouncedSaveDraft);
   });
 
   const newFormBtn = document.getElementById("newFormBtn");
@@ -948,6 +1230,28 @@ function removeRow(btn) {
     allowOnlyDigits(accountInput, 18);
   }
 
+  const interviewDropdown = document.getElementById("interviewedBefore");
+  const interviewDetails = document.getElementById("interviewDetails");
+
+  if (interviewDropdown && interviewDetails) {
+
+    interviewDropdown.addEventListener("change", function () {
+
+      if (this.value === "yes") {
+        interviewDetails.style.display = "block";
+      } else {
+        interviewDetails.style.display = "none";
+
+        // Optional: clear values when hidden
+        interviewDetails.querySelectorAll("input").forEach(input => {
+          input.value = "";
+        });
+      }
+
+    });
+    interviewDropdown.dispatchEvent(new Event("change"));
+  }
+
   /* ================= ERROR HELPERS ================= */
   function clearStepErrors(step) {
     step?.querySelectorAll(".error-text")?.forEach(e => e.remove());
@@ -955,25 +1259,6 @@ function removeRow(btn) {
     step?.querySelector(".step-error")?.remove();
   }
 
-  function clearError(el) {
-    if (!el) return;
-    el.classList.remove("error");
-    const next = el.nextElementSibling;
-    if (next && next.classList.contains("error-text")) next.remove();
-  }
-
-  function showError(el, msg, silent = false) {
-    if (silent || !el) return;
-
-    clearError(el); // ✅ prevents stacking
-
-    el.classList.add("error");
-
-    const s = document.createElement("small");
-    s.className = "error-text";
-    s.innerText = msg;
-    el.after(s);
-  }
 
   function showStepError(step, msg, silent = false) {
     if (silent) return;
@@ -1135,41 +1420,39 @@ function removeRow(btn) {
 
 
   /* =========================================================
-    BANK ACCOUNT (MASKED)
-  ========================================================= */
+   BANK ACCOUNT (FIXED MASKING LOGIC)
+ ========================================================= */
+
   const bankAccInput = document.getElementById("bankAccountDisplay");
   const bankAccHidden = document.getElementById("bankAccount");
 
+  // While typing → allow up to 18 digits, show real value
   bankAccInput?.addEventListener("input", e => {
-    if (isRestoring) return; // ✅ Fixed flag name
+    if (isRestoring) return;
 
     let v = e.target.value.replace(/\D/g, "");
     if (v.length > 18) v = v.slice(0, 18);
 
-    if (v.length >= 8) {
-      realBankAccount = v;
-      bankAccHidden.value = v;
+    realBankAccount = v;
+    bankAccHidden.value = v;
 
-      const masked = "XXXXXX" + v.slice(-4);
-      e.target.value = masked;
-    } else {
-      realBankAccount = "";
-      bankAccHidden.value = "";
-      e.target.value = v;
+    // Show real value while typing (NOT masked)
+    e.target.value = v;
+  });
+
+  // On focus → show real number
+  bankAccInput?.addEventListener("focus", () => {
+    if (realBankAccount) {
+      bankAccInput.value = realBankAccount;
     }
   });
 
-  bankAccInput?.addEventListener("focus", () => {
-    if (realBankAccount) bankAccInput.value = realBankAccount;
-  });
-
+  // On blur → mask if valid length (8-18 digits)
   bankAccInput?.addEventListener("blur", () => {
-    if (realBankAccount && realBankAccount.length >= 8) {
+    if (realBankAccount.length >= 8) {
       bankAccInput.value = "XXXXXX" + realBankAccount.slice(-4);
     }
   });
-
-
 
   /* =========================================================
     STEP 1 – PERSONAL
@@ -1210,47 +1493,11 @@ function removeRow(btn) {
     ageInput.value = age >= 0 ? age : "";
   });
 
-  /* ---------- MARITAL STATUS TOGGLE ---------- */
-  function toggleMaritalFields() {
-    const show = maritalStatus?.value === "Married";
-
-    if (marriageDate?.parentElement)
-      marriageDate.parentElement.style.display = show ? "block" : "none";
-
-    if (childrenCount?.parentElement)
-      childrenCount.parentElement.style.display = show ? "block" : "none";
-
-    if (!show) {
-      marriageDate.value = "";
-      childrenCount.value = "";
-      clearError(marriageDate);
-      clearError(childrenCount);
-    }
-  }
-
   maritalStatus?.addEventListener("change", toggleMaritalFields);
-  toggleMaritalFields();
-
-  /* ---------- PROLONGED ILLNESS TOGGLE ---------- */
-  function toggleIllnessFields() {
-    const show = prolongedIllness?.value === "Yes";
-
-    if (illnessName?.parentElement)
-      illnessName.parentElement.style.display = show ? "block" : "none";
-
-    if (illnessDuration?.parentElement)
-      illnessDuration.parentElement.style.display = show ? "block" : "none";
-
-    if (!show) {
-      illnessName.value = "";
-      illnessDuration.value = "";
-      clearError(illnessName);
-      clearError(illnessDuration);
-    }
-  }
+  // toggleMaritalFields();
 
   prolongedIllness?.addEventListener("change", toggleIllnessFields);
-  toggleIllnessFields();
+  // toggleIllnessFields();
 
   function syncMaskedKYC() {
     if (
@@ -1269,9 +1516,6 @@ function removeRow(btn) {
       realAadhaar = aadhaarInput.value;
     }
   }
-
-
-
 
   function validateKYC(silent = false) {
     syncMaskedKYC();
@@ -1309,8 +1553,8 @@ function removeRow(btn) {
 
     const fn = step.querySelector("#firstName");
     const ln = step.querySelector("#lastName");
-    const pan = step.querySelector("#pan");
-    const aadhaar = step.querySelector("#aadhaar");
+    // const pan = step.querySelector("#pan");
+    // const aadhaar = step.querySelector("#aadhaar");
     const dob = step.querySelector("#dob");
     const age = step.querySelector("#age");
 
@@ -1420,7 +1664,8 @@ function removeRow(btn) {
 
     if (!genderChecked) {
       clearError(genderGroup);
-      showError(genderGroup, " ", silent);
+      showError(genderGroup, "Required", silent);
+
       ok = false;
     }
     // ----- Place of Birth  -----
@@ -1486,17 +1731,12 @@ function removeRow(btn) {
       ok = false;
     }
 
-    const acc = document.getElementById("bankAccount");
-    if (!isDigits(acc.value) || acc.value.length < 8 || acc.value.length > 18) {
-      showError(acc, "Account number must be 8–18 digits", silent);
+    if (!realBankAccount || realBankAccount.length < 8 || realBankAccount.length > 18) {
+      showError(bankAccInput, "Required Account number(8-18 digits)", silent);
       ok = false;
     }
 
-    const uan = document.getElementById("uan");
-    if (uan && !/^\d{12}$/.test(uan.value)) {
-      showError(uan, "UAN must be exactly 12 digits", silent);
-      ok = false;
-    }
+
 
     // ----- Bank Name -----
     const bankName = step.querySelector("#bankName");
@@ -1520,14 +1760,14 @@ function removeRow(btn) {
       ok = false;
     }
 
-    step.querySelectorAll("input, textarea").forEach(el => {
-      if (isSkippable(el)) return;
+    // step.querySelectorAll("input, textarea").forEach(el => {
+    //   if (isSkippable(el)) return;
 
-      if (!el.value.trim()) {
-        showError(el, "Required", silent);
-        ok = false;
-      }
-    });
+    //   if (!el.value.trim()) {
+    //     showError(el, "Required", silent);
+    //     ok = false;
+    //   }
+    // });
 
     // ----- PAN -----
     const email = step.querySelector("#email");
@@ -1604,22 +1844,21 @@ function removeRow(btn) {
         ok = false;
       }
 
-      // Income required
+
       if (!income || income.value === "") {
         showError(income, "Income is required", silent);
         ok = false;
       }
-
 
       if (!dep?.value) {
         showError(dep, "Dependent status required", silent);
         ok = false;
       }
 
-      if (dep?.value === "Yes" && Number(income?.value) > 0) {
-        showError(income, "Dependent income must be 0", silent);
-        ok = false;
-      }
+      // if (income.value && income.value.length > 6) {
+      //   showError(income, "Maximum 6 digits allowed", silent);
+      //   ok = false;
+      // }
 
       if (income && Number(income.value) < 0) {
         showError(income, "Income cannot be negative", silent);
@@ -1635,7 +1874,7 @@ function removeRow(btn) {
         seen.add(rel.value);
       }
 
-      // ✅ Parent age validation (FIXED)
+      // ✅ Parent age validation
       if (
         (rel?.value === "Father" || rel?.value === "Mother") &&
         dob?.value &&
@@ -1650,22 +1889,6 @@ function removeRow(btn) {
         }
       }
 
-      // Dependent validation
-      if (!dep?.value) {
-        showError(dep, "Select dependent status", silent);
-        ok = false;
-      }
-
-      if (dep?.value === "Yes" && Number(income?.value) > 0) {
-        showError(income, "If YES income must be 0 for dependents", silent);
-        ok = false;
-      }
-
-      if (income && Number(income.value) < 0) {
-        showError(income, "Income cannot be negative", silent);
-        ok = false;
-      }
-
     });
 
     if (!ok && !silent) {
@@ -1675,142 +1898,239 @@ function removeRow(btn) {
         focusFirstError(step);
       }
     }
-
-    return ok
+    return ok;
   }
 
   /* =========================================================
     STEP 3 – EDUCATION
   ========================================================= */
-  function addLanguage() {
-    const container = document.getElementById("extraLanguages");
-    const div = document.createElement("div");
-    div.className = "language-item";
-    div.innerHTML = `
-    <input type="text" placeholder="Enter language" class="language-input" required>
-    <button type="button" onclick="this.parentElement.remove()">Remove</button>
-  `;
-    container.appendChild(div);
-  }
+  // function addLanguage() {
+  //   const container = document.getElementById("extraLanguages");
+  //   const div = document.createElement("div");
+  //   div.className = "language-item";
+  //   div.innerHTML = `
+  //   <input type="text" placeholder="Enter language" class="language-input" required>
+  //   <button type="button" onclick="this.parentElement.remove()">Remove</button>
+  // `;
+  //   container.appendChild(div);
+  // }
+
+  // function restoreLanguages(savedLanguages) {
+  //   const tbody = document.querySelector("#languageTable tbody");
+  //   tbody.innerHTML = "";
+  //   addLanguageRow("English", false);
+  //   addLanguageRow("Hindi", false);
+  //   savedLanguages.forEach(lang => {
+  //     addLanguageRow(lang.name, true, lang);
+  //   });
+  // }
 
   function validateStep3(silent = false) {
     const step = steps[2];
+    if (!step) return true; // defensive check
+
     if (!silent) clearStepErrors(step);
 
     let ok = true;
-    const rows = step.querySelectorAll(".education-row");
+    const rows = document.querySelectorAll(
+      ".graduation-wrapper table tbody tr, #extraGraduations table tbody tr"
+    );
 
     if (!rows.length) {
       showStepError(step, "Add at least one education detail", silent);
       return false;
     }
 
-    rows.forEach(row => {
-      const college = row.querySelector("input[name='collegeName']");
-      const board = row.querySelector("input[name='board']");
-      const degree = row.querySelector("input[name='degree']");
-      const stream = row.querySelector("input[name='stream']");
-      const joinYear = row.querySelector("input[name='joiningYear']");
-      const leaveYear = row.querySelector("input[name='leavingYear']");
+    const degreeSet = new Set();
+    const currentYear = new Date().getFullYear();
+    const dobValue = document.getElementById("dob")?.value;
+    const dobYear = dobValue ? new Date(dobValue).getFullYear() : null;
+    const member = document.getElementById("member");
+    const honors = document.getElementById("honors");
 
-      const percent = row.querySelector("input[name='percentage']");
 
-      // allowOnlyYear(joinYear);
-      // allowOnlyYear(leaveYear);
+   if (!validateStep3Languages(false)) {
+  ok = false;
 
-      /* ---------- Alphabet‑only fields ---------- */
-      if (!college.value || !isAlphaOnly(college.value)) {
-        showError(college, "required", silent);
+  if (!silent) {
+    showSummaryError(step, "Please correct language details");
+    focusFirstError(step);
+  }
+}
+
+    let graduationLeavingYear = null;
+
+    const gradRow = rows[0];
+    if (gradRow) {
+      const gradLeave = gradRow.querySelector("input[name='grad_leaving[]']");
+      if (gradLeave && isYear(gradLeave.value)) {
+        graduationLeavingYear = +gradLeave.value;
+      }
+    }
+
+    rows.forEach((row, index) => {
+      const college = row.querySelector("input[name='grad_college[]']");
+      const board = row.querySelector("input[name='grad_board[]']");
+      const degree = row.querySelector("input[name='grad_degree[]']");
+      const stream = row.querySelector("input[name='grad_stream[]']");
+      const joinYear = row.querySelector("input[name='grad_joining[]']");
+      const leaveYear = row.querySelector("input[name='grad_leaving[]']");
+      const percent = row.querySelector("input[name='grad_aggregate[]']");
+
+
+      /* ---------- Prevent Completely Blank Row ---------- */
+      const allEmpty =
+        !college.value.trim() &&
+        !board.value.trim() &&
+        !degree.value.trim() &&
+        !stream.value.trim() &&
+        !joinYear.value.trim() &&
+        !leaveYear.value.trim() &&
+        !percent.value.trim();
+
+      if (allEmpty) {
+        showError(college, "Fill education details or remove row", silent);
+        ok = false;
+        return;
+      }
+
+      /* ---------- Required Fields ---------- */
+      // ✅ College Name
+      if (!college.value || !/^[A-Za-z0-9 .,'&()-]+$/.test(college.value)) {
+        showError(college, "Required", silent);
         ok = false;
       }
 
+      // ✅ Board
       if (!board.value || !isAlphaOnly(board.value)) {
-        showError(board, "required", silent);
+        showError(board, "Required", silent);
         ok = false;
       }
 
+      // ✅ Degree
       if (!degree.value || !isAlphaOnly(degree.value)) {
-        showError(degree, "required", silent);
+        showError(degree, "Required", silent);
         ok = false;
       }
 
-      if (!stream.value || !isAlphaOnly(stream.value)) {
-        showError(stream, "required", silent);
-        ok = false;
+      // ✅ Stream (required only for Graduation - index 0)
+      // ✅ Stream (required for all rows)
+      // Stream required for all rows EXCEPT schooling (index 2)
+      // Stream required only if degree is NOT "Schooling"
+      if (degree.value.trim().toLowerCase() !== "schooling") {
+        if (!stream.value.trim()) {
+          showError(stream, "Required", silent);
+          ok = false;
+        } else if (!isAlphaOnly(stream.value)) {
+          showError(stream, "Alphabets only", silent);
+          ok = false;
+        }
       }
 
+      /* ---------- Year Sequencing with Graduation Awareness ---------- */
+      if (isYear(joinYear.value) && isYear(leaveYear.value)) {
 
-      /* ---------- Year validation ---------- */
+        if (+leaveYear.value <= +joinYear.value) {
+          showError(leaveYear, "Leaving year must be after joining year", silent);
+          ok = false;
+        }
+
+        // Graduation row (index 0)
+        if (index === 0) {
+          if (+leaveYear.value - +joinYear.value > 6) {
+            showError(leaveYear, "Graduation duration cannot exceed 6 years", silent);
+            ok = false;
+          }
+        }
+
+        // Pre-graduation rows (1 & 2)
+        if ((index === 1 || index === 2) && graduationLeavingYear !== null) {
+          if (+leaveYear.value >= graduationLeavingYear) {
+            showError(leaveYear, "Must be completed before Graduation", silent);
+            ok = false;
+          }
+        }
+
+        // Post-graduation rows (3+)
+        if (index >= 3 && graduationLeavingYear !== null) {
+          if (+joinYear.value <= graduationLeavingYear) {
+            showError(joinYear, "Post-graduation must start after Graduation", silent);
+            ok = false;
+          }
+        }
+      }
+
+      /* ---------- Year Validation ---------- */
       if (!isYear(joinYear.value)) {
         showError(joinYear, "Enter valid 4-digit joining year", silent);
+        ok = false;
+      } else if (+joinYear.value > currentYear) {
+        showError(joinYear, "Joining year cannot be in the future", silent);
+        ok = false;
+      } else if (dobYear !== null && +joinYear.value < dobYear + 5) {
+        showError(joinYear, "Joining year is not realistic", silent);
         ok = false;
       }
 
       if (!isYear(leaveYear.value)) {
         showError(leaveYear, "Enter valid 4-digit leaving year", silent);
         ok = false;
+      } else if (+leaveYear.value > currentYear) {
+        showError(leaveYear, "Leaving year cannot be in the future", silent);
+        ok = false;
       }
 
       if (
         isYear(joinYear.value) &&
         isYear(leaveYear.value) &&
-        +leaveYear.value <= +joinYear.value
+        +leaveYear.value > +joinYear.value
       ) {
-        showError(
-          leaveYear,
-          "Leaving year must be after joining year",
-          silent
-        );
-        ok = false;
+        if (+leaveYear.value - +joinYear.value > 10) {
+          showError(leaveYear, "Education duration seems invalid (>10 yrs)", silent);
+          ok = false;
+        }
       }
 
       /* ---------- Percentage ---------- */
-      if (!percent.value || percent.value < 0 || percent.value > 100) {
-        showError(percent, "must be between 0 and 100", silent);
+      const percentValue = Number(percent.value);
+
+      if (percent.value === "" || isNaN(percentValue)) {
+        showError(percent, "Required", silent);
         ok = false;
+      } else if (percentValue < 35 || percentValue > 100) {
+        showError(percent, "Percentage must be between 35 and 100", silent);
+        ok = false;
+      }
+
+      /* ---------- Prevent Duplicate Degrees ---------- */
+      if (degree.value.trim()) {
+        const degreeKey =
+          degree.value.trim().toLowerCase() + "_" +
+          stream.value.trim().toLowerCase();
+
+        if (degreeSet.has(degreeKey)) {
+          showError(degree, "Duplicate degree entry", silent);
+          ok = false;
+        } else {
+          degreeSet.add(degreeKey);
+        }
       }
     });
 
-    const member = step.querySelector(
-      'select[name="memberOfProfessionalBody"]'
-    );
-
-    const honors = step.querySelector(
-      'select[name="specialHonors"]'
-    );
-
-    if (member && member.value === "Select") {
+    if (!member || !member.value) {
       showError(member, "Please select an option", silent);
       ok = false;
     }
 
-    if (honors && honors.value === "Select") {
+    if (!honors || !honors.value) {
       showError(honors, "Please select an option", silent);
       ok = false;
     }
-
-
-    // ===== Conditional Skill Textareas (Yes → Details Required) =====
-    // Pattern: <select> immediately followed by a <textarea>
-
-    // const conditionalPairs = [
-    //   {
-    //     question: "Member of Professional Body / Society?",
-    //     selectIndex: 0
-    //   },
-    //   {
-    //     question: "Special Honors / Scholarships?",
-    //     selectIndex: 1
-    //   }
-    // ];
-
 
     const literary = document.getElementById("activityLiterary");
     const sports = document.getElementById("activitySports");
     const hobbies = document.getElementById("activityHobbies");
     const extraError = document.getElementById("extraCurricularError");
-
-
 
     if (
       !literary?.value.trim() &&
@@ -1819,59 +2139,26 @@ function removeRow(btn) {
     ) {
       if (extraError) extraError.style.display = "block";
 
-      // ✅ mark ONE real field as error so focus works
-      showError(literary || sports || hobbies,
-        "Enter at least one activity", silent);
-
-      ok = false;
-    } else {
-      if (extraError) extraError.style.display = "none";
-    }
-
-    function validateStep3Languages() {
-      const checked = document.querySelectorAll(
-        '#languageSection input[type="checkbox"]:checked'
-      );
-
-      const manualInputs = document.querySelectorAll(
-        '#extraLanguages .language-input'
-      );
-
-      const error = document.getElementById("languageError");
-
-      let hasManualValue = false;
-      manualInputs.forEach(input => {
-        if (input.value.trim() !== "") hasManualValue = true;
-      });
-
-      if (checked.length === 0 && !hasManualValue) {
-        if (error) error.style.display = "block";
-
-        // ✅ force highlight
-        const first = document.querySelector(
-          '#languageSection input[type="checkbox"], #extraLanguages .language-input'
-        );
-        if (first) first.classList.add("error");
-
-        return false;
+      const target = literary || sports || hobbies;
+      if (target) {
+        showError(target, "Enter at least one activity", silent);
       }
 
-      if (error) error.style.display = "none";
-      return true;
+      ok = false;
+    }
+    else {
+      if (extraError) extraError.style.display = "none";
     }
 
     const motherTongueSelected = document.querySelector(
       "#languageTable input[name='motherTongue']:checked"
     );
+    // if (!motherTongueSelected) {
+    //   const radioGroup = document.querySelector("#languageTable");
+    //   showError(radioGroup, "Select mother tongue", silent);
+    //   ok = false;
+    // }
 
-    if (!motherTongueSelected) {
-      const firstRadio = document.querySelector(
-        "#languageTable input[name='motherTongue']"
-      );
-
-      showError(firstRadio, "Select mother tongue", silent);
-      ok = false;
-    }
 
     const strengths = document.getElementById("strengths");
     const weaknesses = document.getElementById("Weaknesses");
@@ -1897,7 +2184,7 @@ function removeRow(btn) {
     step.querySelectorAll("select + textarea").forEach(textarea => {
       const select = textarea.previousElementSibling;
 
-      if (select.value === "Yes" && isBlank(textarea.value)) {
+      if (select.value.toLowerCase() === "yes" && isBlank(textarea.value)) {
         showError(
           textarea,
           "Details are required when 'Yes' is selected",
@@ -1923,66 +2210,150 @@ function removeRow(btn) {
     return ok;
   }
 
+
+  /* =========================================================
+    STEP 4 – EXPERIENCE
+  ========================================================= */
+  function toggleExperienceDependentSections() {
+    const years = Number(document.getElementById("expYears")?.value || 0);
+    const months = Number(document.getElementById("expMonths")?.value || 0);
+    const hasExperience = years > 0 || months > 0;
+
+    // Toggle UAN
+    const uanContainer = document.getElementById("uanContainer");
+    if (uanContainer) {
+      uanContainer.style.display = hasExperience ? "block" : "none";
+      if (!hasExperience) {
+        const uanInput = document.getElementById("uan");
+        if (uanInput) {
+          uanInput.value = "";
+          clearError(uanInput);
+        }
+      }
+    }
+
+    // Toggle Employment History & Assignments
+    const empHistory = document.getElementById("employmentHistory");
+    const assignments = document.getElementById("assignmentsHandled");
+
+    if (empHistory) empHistory.style.display = hasExperience ? "block" : "none";
+    if (assignments) assignments.style.display = hasExperience ? "block" : "none";
+  }
+
+  // Bind events
+  document.getElementById("expYears")?.addEventListener("input", toggleExperienceDependentSections);
+  document.getElementById("expMonths")?.addEventListener("input", toggleExperienceDependentSections);
+  // Call once on load/init logic (handled in restoreDraftState or similar, but good to ensure)
+
   /* =========================================================
     STEP 4 – EXPERIENCE
   ========================================================= */
   function validateStep4(silent = false) {
-  const step = steps[3];
-  if (!silent) clearStepErrors(step);
+    const step = steps[3];
+    if (!silent) clearStepErrors(step);
 
-  let ok = true;
+    let ok = true;
 
-  const yearsEl = step.querySelector("#expYears");
-  const monthsEl = step.querySelector("#expMonths");
+    const yearsEl = step.querySelector("#expYears");
+    const monthsEl = step.querySelector("#expMonths");
 
-  const years = Number(yearsEl.value);
-  const months = Number(monthsEl.value);
+    const years = Number(yearsEl.value);
+    const months = Number(monthsEl.value);
 
-  /* ================= TOTAL EXPERIENCE (REQUIRED) ================= */
+    /* ================= TOTAL EXPERIENCE (REQUIRED) ================= */
 
-  if (yearsEl.value.trim() === "" || years < 0) {
-    showError(yearsEl, "Experience years is required", silent);
-    ok = false;
-  }
+    if (yearsEl.value.trim() === "" || years < 0) {
+      showError(yearsEl, "Experience years is required", silent);
+      ok = false;
+    }
 
-  if (monthsEl.value.trim() === "" || months < 0 || months > 11) {
-    showError(monthsEl, "Experience months is required (0–11)", silent);
-    ok = false;
-  }
+    if (monthsEl.value.trim() === "" || months < 0 || months > 11) {
+      showError(monthsEl, "Experience months is required (0–11)", silent);
+      ok = false;
+    }
 
-  /* ================= EMPLOYMENT HISTORY (REQUIRED) ================= */
-  step
-    .querySelectorAll("#employmentHistory input, #employmentHistory textarea")
-    .forEach(el => {
-      if (isSkippable(el)) return;
+    const hasExperience = years > 0 || months > 0;
 
-      if (!el.value.trim()) {
-        showError(el, "This field is required", silent);
+    /* ================= EXPERIENCE DATE VALIDATION ================= */
+    const fromDateEl = step.querySelector("#expFrom");
+    const toDateEl = step.querySelector("#expTo");
+
+    if (hasExperience && fromDateEl && toDateEl) {
+
+      if (!fromDateEl.value) {
+        showError(fromDateEl, "From date is required", silent);
         ok = false;
       }
-    });
 
-  /* ================= ASSIGNMENTS HANDLED (REQUIRED) ================= */
-  step
-    .querySelectorAll("#assignmentsHandled input, #assignmentsHandled textarea")
-    .forEach(el => {
-      if (isSkippable(el)) return;
-
-      if (!el.value.trim()) {
-        showError(el, "This field is required", silent);
+      if (!toDateEl.value) {
+        showError(toDateEl, "To date is required", silent);
         ok = false;
       }
-    });
 
-  if (!ok && !silent) {
-    showSummaryError(
-      step,
-      "Please complete Total Experience, Employment History, and Assignments"
-    );
-    focusFirstError(step);
+      if (fromDateEl.value && toDateEl.value) {
+        const fromDate = new Date(fromDateEl.value);
+        const toDate = new Date(toDateEl.value);
+
+        if (toDate <= fromDate) {
+          showError(toDateEl, "To Date must be greater than From Date", silent);
+          ok = false;
+        }
+      }
+    }
+
+    /* ================= UAN (REQUIRED IF EXPERIENCED) ================= */
+    const uan = document.getElementById("uan");
+    if (hasExperience && uan) {
+      if (!/^\d{12}$/.test(uan.value)) {
+        showError(uan, "UAN must be exactly 12 digits", silent);
+        ok = false;
+      }
+    }
+
+    if (hasExperience) {
+
+      /* ================= EMPLOYMENT HISTORY ================= */
+      step
+        .querySelectorAll("#employmentHistory input, #employmentHistory textarea")
+        .forEach(el => {
+          if (isSkippable(el)) return;
+
+          if (!el.value.trim()) {
+            showError(el, "This field is required", silent);
+            ok = false;
+          }
+        });
+
+
+      /* ================= ASSIGNMENTS HANDLED ================= */
+      step
+        .querySelectorAll("#assignmentsHandled input, #assignmentsHandled textarea")
+        .forEach(el => {
+          if (isSkippable(el)) return;
+
+          if (!el.value.trim()) {
+            showError(el, "This field is required", silent);
+            ok = false;
+          }
+        });
+
+    }
+    if (!ok && !silent) {
+      if (hasExperience) {
+        showSummaryError(
+          step,
+          "Please fill all the fields"
+        );
+      } else {
+        showSummaryError(
+          step,
+          "Please enter valid Total Experience details"
+        );
+      }
+      focusFirstError(step);
+    }
+    return ok;
   }
-  return ok;
-}
 
   /* =========================================================
   STEP 5
@@ -2058,17 +2429,54 @@ function removeRow(btn) {
 
   // ================= STEP 5 – VALIDATION =================
   function validateStep5(silent = false) {
+    const step = steps[4];
+    let ok = true;
+
+    if (!silent) clearStepErrors(step);
+
+    /* ===== Interview Conditional Validation ===== */
+    const interviewDropdown = step.querySelector("#interviewedBefore");
+    const interviewDate = step.querySelector("#interviewDate");
+    const interviewPlace = step.querySelector("#interviewPlace");
+    const interviewerName = step.querySelector("#interviewerName");
+    const interviewPost = step.querySelector("#interviewPost");
+
+    if (!interviewDropdown?.value) {
+      showError(interviewDropdown, "Please select an option", silent);
+      ok = false;
+    }
+
+    if (interviewDropdown?.value === "yes") {
+
+      if (!interviewDate?.value) {
+        showError(interviewDate, "Interview date is required", silent);
+        ok = false;
+      }
+
+      if (!interviewPlace?.value.trim()) {
+        showError(interviewPlace, "Place is required", silent);
+        ok = false;
+      }
+
+      if (!interviewerName?.value.trim()) {
+        showError(interviewerName, "Interviewer name is required", silent);
+        ok = false;
+      }
+
+      if (!interviewPost?.value.trim()) {
+        showError(interviewPost, "Post is required", silent);
+        ok = false;
+      }
+    }
+
     const years = Number(document.getElementById("expYears")?.value || 0);
     const months = Number(document.getElementById("expMonths")?.value || 0);
     const hasExperience = years > 0 || months > 0;
 
-    if (!silent) clearStepErrors(step5);
-    let ok = true;
-
     /* ===== ALWAYS REQUIRED ===== */
-    const declaration = step5.querySelector("#declaration");
-    const declDate = step5.querySelector("#declDate");
-    const declPlace = step5.querySelector("#declPlace");
+    const declaration = step.querySelector("#declaration");
+    const declDate = step.querySelector("#declDate");
+    const declPlace = step.querySelector("#declPlace");
 
     if (!declaration?.checked) {
       showError(declaration, "Declaration is required", silent);
@@ -2093,7 +2501,7 @@ function removeRow(btn) {
 
     /* ===== IF YES → LOAN DETAILS REQUIRED ===== */
     if (loanAvailed?.value === "Yes") {
-      loanFields.style.display = "grid";
+      loanFields && (loanFields.style.display = "grid");
 
       if (!loanPurpose?.value.trim()) {
         showError(loanPurpose, "Loan purpose is required", silent);
@@ -2124,6 +2532,7 @@ function removeRow(btn) {
       }
     }
 
+
     /* ================= EXPERIENCE DEPENDENT ================= */
     if (hasExperience) {
 
@@ -2138,18 +2547,21 @@ function removeRow(btn) {
 
 
       /* ================= PRESENT SALARY (REQUIRED) ================= */
-      salarySection
-        ?.querySelectorAll("input, select")
-        .forEach(el => {
-          if (isSkippable(el)) return;
-          if (
-            !el.value ||
-            (el.type === "number" && Number(el.value) <= 0)
-          ) {
-            showError(el, "Required", silent);
-            ok = false;
-          }
-        });
+      step.querySelectorAll("#salarySection input").forEach(el => {
+
+        if (isSkippable(el)) return;
+
+        // Skip "Others" fields
+        if (el.id === "monthlyOthers" || el.id === "statutoryOthers") {
+          return;
+        }
+
+        if (!el.value.trim()) {
+          showError(el, "This field is required", silent);
+          ok = false;
+        }
+      });
+
 
 
       /* ================= OTHER PARTICULARS (REQUIRED) ================= */
@@ -2188,7 +2600,6 @@ function removeRow(btn) {
       });
 
       if (validRefs === 0 && refs.length > 0) {
-        // ✅ Force highlight
         refs[0]
           .querySelectorAll("input")
           .forEach(i => showError(i, "Required", silent));
@@ -2199,7 +2610,7 @@ function removeRow(btn) {
     }
     /* ================= LOAN (ONLY IF YES) ================= */
     if (loanAvailed?.value === "Yes" && loanFields) {
-      loanFields.style.display = "grid";
+      loanFields && (loanFields.style.display = "grid");
 
       if (!loanPurpose?.value.trim()) {
         showError(loanPurpose, "Loan purpose required", silent);
@@ -2380,14 +2791,14 @@ function removeRow(btn) {
       return;
     }
 
-    debouncedSaveDraft(); 
+    debouncedSaveDraft();
     currentStep++;
     updateUI();
   };
 
   /* ===== PREVIOUS BUTTON ===== */
   prevBtn.onclick = () => {
-    debouncedSaveDraft(); 
+    debouncedSaveDraft();
     currentStep--;
     updateUI();
     updateNextVisualState();
@@ -2472,7 +2883,7 @@ function removeRow(btn) {
 
     try {
       // const res = await fetch("/api/submit", {\\\\\\\\\\\\\\\\\\\\\>>>>>>>>>>>><<<<<<<<<<<<<>/..........
-      const res = await fetch("http://localhost:8080/api/candidates", {
+      const res = await fetch(`${API_BASE}/api/candidates`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -2499,27 +2910,6 @@ function removeRow(btn) {
       await clearDraft(); // clear IndexedDB draft
     }
 
-    let draft = null;
-
-    // 1️⃣ Server draft (cross-device)
-    if (serverDraft) {
-      draft = JSON.parse(serverDraft);
-    }
-
-    // 2️⃣ Local IndexedDB draft fallback
-    if (!draft) {
-      draft = await loadDraft();
-    }
-
-    if (!draft) return;
-
-    // Unified restoration
-    await restoreDraftState(draft);
-
-    if (typeof draft.step === "number") {
-      currentStep = draft.step;
-    }
-
     updateUI();
 
     requestAnimationFrame(() => {
@@ -2537,7 +2927,7 @@ function removeRow(btn) {
 
     for (const payload of pending) {
       try {
-        const res = await fetch("http://localhost:8080/api/candidates", {
+        const res = await fetch(`${API_BASE}/api/candidates`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
@@ -2553,4 +2943,4 @@ function removeRow(btn) {
   });
   updateUI();
   updateNextVisualState();
-}); 
+});

@@ -58,10 +58,6 @@ body {
   margin-bottom: 25px;
 }
 
-.form-field {
-  margin-bottom: 20px;
-
-}
 
 .form-field label {
   display: block;
@@ -92,26 +88,20 @@ body {
   background: #1c486e;
 }
 
-
-/* Wrap inputs in a field container */
 .form-field {
+  margin-bottom: 18px;
   position: relative;
-  margin-bottom: 12px;
-  /* keeps layout stable */
 }
 
 /* Error message space is reserved */
 
 .error-text {
-  position: absolute;
-  left: 0;
-  bottom: -18px;
+  position: static;     /* IMPORTANT */
+  display: block;
+  margin-top: 4px;
   font-size: 12px;
   color: #d32f2f;
-  line-height: 1.3;
-  pointer-events: auto;
-  max-width: 100%;
-  white-space: normal;
+  line-height: 1.4;
 }
 
 .form-step {
@@ -180,9 +170,12 @@ body {
 /* ================= SIDEBAR ================= */
 .sidebar {
   position: fixed;
+  top: 120px;
   font-style: italic;
+  left: 0;
   width: 260px;
-  height: 85vh;
+  /* height: 85vh; */
+  height: calc(100vh - 120px);
   border-radius: 10px;
   background-image: url("sideimg1.jpg");
   background-repeat: no-repeat;
@@ -269,11 +262,11 @@ body {
 
 /* ================= MAIN CONTAINER ================= */
 .container {
+  flex: 1;
   margin-left: 260px;
-  /* SIDEBAR SPACE */
   padding: 20px;
-  width: calc(100% - 260px);
 }
+
 
 .container>form {
   max-width: 950px;
@@ -408,8 +401,8 @@ button:hover {
   display: none;
 }
 
-button.disabled {
-  opacity: 1;
+button:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
@@ -541,10 +534,9 @@ textarea.error {
   display: none;
 }
 
-.family-table td:nth-child(3) {
-  color: #333;
-  font-weight: 600;
+.family-table input[readonly] {
   cursor: not-allowed;
+  background: #f3f3f3;
 }
 
 .doc-title {
@@ -586,7 +578,6 @@ textarea.error {
   background: #47749b;
   color: white;
 }
-
 
 .activity-table {
   width: 100%;
@@ -685,11 +676,6 @@ textarea.error {
 } */
 
 /* Prevent row height jump */
-.education-table td {
-  vertical-align: top;
-  padding-bottom: 22px;
-}
-
 
 .education-section {
   margin-top: 15px;
@@ -703,8 +689,9 @@ textarea.error {
 .education-table th,
 .education-table td {
   border: 1px solid #ddd;
-  padding: 4px;
+  padding: 6px;
   text-align: center;
+  vertical-align: top;
 }
 
 .education-table th {
@@ -717,10 +704,12 @@ textarea.error {
   box-sizing: border-box;
 }
 
-.btn-add {
-  margin-top: 10px;
-  padding: 6px 12px;
+.education-table .error-text {
+  position: static;
+  display: block;
+  margin-top: 4px;
 }
+
 
 .btn-delete {
   margin-top: 8px;
